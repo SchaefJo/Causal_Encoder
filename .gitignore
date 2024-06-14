@@ -141,3 +141,5 @@ pretrained_models/
 # Datasets
 data/
 demo_data/
+
+.idea
