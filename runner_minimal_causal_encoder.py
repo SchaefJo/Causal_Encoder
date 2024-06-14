@@ -152,14 +152,15 @@ class RunnerMinimalCausalEncoder():
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataset = iTHORDataset("../data/ithor/val_small/", split='val', single_image=True, return_targets=True, return_latents=True)#
-
+    # TODO play around with how data is loaded, is it correct now?
+    # TODO single image? extract examples for classifier???
+    dataset = iTHORDataset("../data/ithor/val_small/", split='val', single_image=True, return_targets=True, return_latents=True)
     model = BISCUITNF.load_from_checkpoint('../data/ithor/models/BISCUITNF_40l_64hid.ckpt')
     model.to(device)
     model.freeze()
     _ = model.eval()
 
-    causal_encode_runner = RunnerMinimalCausalEncoder(num_train_epochs=5)
+    causal_encode_runner = RunnerMinimalCausalEncoder()
     r2 = causal_encode_runner.test_model(model, dataset)
     np.set_printoptions(precision=6, suppress=True)
     print(r2)
