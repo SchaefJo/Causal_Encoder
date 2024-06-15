@@ -1,20 +1,34 @@
+import argparse
 from collections import OrderedDict
 
 import numpy as np
 import torch
 from tqdm import tqdm
 import torch.nn.functional as F
-from experiments.datasets import iTHORDataset
+from experiments.datasets import iTHORDataset, VoronoiDataset
+from models.biscuit_vae import BISCUITVAE
 from models.shared.causal_encoder import CausalEncoder
 import torch.utils.data as data
 import sys
+from datetime import datetime
+import os
 from models.biscuit_nf import BISCUITNF
 
+
 class RunnerMinimalCausalEncoder():
-    def __init__(self, num_train_epochs=100, train_prop=0.5):
+    def __init__(self, num_train_epochs=100, train_prop=0.5, log_interval=10,
+                 checkpoint_path='pretrained_models/causal_encoder/model.pth'):
         super().__init__()
         self.num_train_epochs = num_train_epochs
         self.train_prop = train_prop
+        self.log_interval = log_interval
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+        checkpoint_array = checkpoint_path.split('.')
+        current_time = datetime.now()
+        date_time_str = current_time.strftime('%d.%m._%H:%M:%S')
+        self.checkpoint_path = ''.join(['.'.join(checkpoint_array[:-1])] + ['_', date_time_str, '.'] + \
+                                       checkpoint_array[-1:])
+
         self.cluster = False
         self.log_postfix = ''
 
@@ -55,6 +69,11 @@ class RunnerMinimalCausalEncoder():
                 loss.backward()
                 optimizer.step()
                 avg_loss += loss.item()
+            if epoch_idx % self.log_interval == 0:
+                avg_loss /= len(train_loader)
+                print(f'Epoch [{epoch_idx}/{self.num_train_epochs}], Loss: {avg_loss:.4f}')
+        torch.save(encoder.state_dict(), self.checkpoint_path)
+        print(f'Model checkpoint saved at {self.checkpoint_path}')
         return encoder
 
     def test_model(self, pl_module, dataset):
@@ -65,6 +84,9 @@ class RunnerMinimalCausalEncoder():
         all_encs, all_latents = [], []
         for batch in loader:
             inps, *_, latents = batch
+            # if multiple images per batch, then train only on last image
+            # if len(inps.shape) == 5:
+            #    inps = inps[:, -1, :, :, :]
             ae_output = pl_module.autoencoder.encoder(inps)
             encs = pl_module.encode(ae_output.to(pl_module.device)).cpu()
             all_encs.append(encs)
@@ -89,7 +111,8 @@ class RunnerMinimalCausalEncoder():
         encoder.eval()
         # Record predictions of model on test and calculate distances
         test_inps, test_labels = all_encs[test_dataset.indices], all_latents[test_dataset.indices]
-        test_exp_inps, test_exp_labels = self._prepare_input(test_inps, target_assignment.cpu(), test_labels, flatten_inp=False)
+        test_exp_inps, test_exp_labels = self._prepare_input(test_inps, target_assignment.cpu(), test_labels,
+                                                             flatten_inp=False)
         pred_dict = encoder.forward(test_exp_inps.to(pl_module.device))
         for key in pred_dict:
             pred_dict[key] = pred_dict[key].cpu()
@@ -105,18 +128,19 @@ class RunnerMinimalCausalEncoder():
         avg_pred_dict = OrderedDict()
         for i, var_key in enumerate(encoder.hparams.causal_var_info):
             var_info = encoder.hparams.causal_var_info[var_key]
-            gt_vals = test_labels[...,i]
+            gt_vals = test_labels[..., i]
             if var_info.startswith('continuous'):
-                avg_pred_dict[var_key] = gt_vals.mean(dim=0, keepdim=True).expand(gt_vals.shape[0],)
+                avg_pred_dict[var_key] = gt_vals.mean(dim=0, keepdim=True).expand(gt_vals.shape[0], )
             elif var_info.startswith('angle'):
                 avg_angle = torch.atan2(torch.sin(gt_vals).mean(dim=0, keepdim=True),
-                                        torch.cos(gt_vals).mean(dim=0, keepdim=True)).expand(gt_vals.shape[0],)
-                avg_angle = torch.where(avg_angle < 0.0, avg_angle + 2*np.pi, avg_angle)
+                                        torch.cos(gt_vals).mean(dim=0, keepdim=True)).expand(gt_vals.shape[0], )
+                avg_angle = torch.where(avg_angle < 0.0, avg_angle + 2 * np.pi, avg_angle)
                 avg_pred_dict[var_key] = torch.stack([torch.sin(avg_angle), torch.cos(avg_angle)], dim=-1)
             elif var_info.startswith('categ'):
                 gt_vals = gt_vals.long()
                 mode = torch.mode(gt_vals, dim=0, keepdim=True).values
-                avg_pred_dict[var_key] = F.one_hot(mode, int(var_info.split('_')[-1])).float().expand(gt_vals.shape[0], -1)
+                avg_pred_dict[var_key] = F.one_hot(mode, int(var_info.split('_')[-1])).float().expand(gt_vals.shape[0],
+                                                                                                      -1)
             else:
                 assert False, f'Do not know how to handle key \"{var_key}\" in R2 statistics.'
         _, _, avg_norm_dists = encoder.calculate_loss_distance(avg_pred_dict, test_labels, keep_sign=True)
@@ -131,8 +155,8 @@ class RunnerMinimalCausalEncoder():
             r2_matrix.append(r2)
         r2_matrix = [r2.detach() for r2 in r2_matrix]
         r2_matrix = torch.stack(r2_matrix, dim=-1).cpu().numpy()
-        #log_matrix(r2_matrix, trainer, 'r2_matrix' + self.log_postfix)
-        #self._log_heatmap(trainer=trainer,
+        # log_matrix(r2_matrix, trainer, 'r2_matrix' + self.log_postfix)
+        # self._log_heatmap(trainer=trainer,
         #                  values=r2_matrix,
         #                  tag='r2_matrix',
         #                  title='R^2 Matrix',
@@ -141,29 +165,51 @@ class RunnerMinimalCausalEncoder():
         return avg_norm_dists, r2_matrix
 
     def _prepare_input(self, inps, target_assignment, latents, flatten_inp=True):
-        ta = target_assignment.detach()[None,:,:].expand(inps.shape[0], -1, -1)
-        inps = torch.cat([inps[:,:,None] * ta, ta], dim=-2).permute(0, 2, 1)
-        latents = latents[:,None].expand(-1, inps.shape[1], -1)
+        ta = target_assignment.detach()[None, :, :].expand(inps.shape[0], -1, -1)
+        inps = torch.cat([inps[:, :, None] * ta, ta], dim=-2).permute(0, 2, 1)
+        latents = latents[:, None].expand(-1, inps.shape[1], -1)
         if flatten_inp:
             inps = inps.flatten(0, 1)
             latents = latents.flatten(0, 1)
         return inps, latents
 
 
-def main():
+def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # TODO play around with how data is loaded, is it correct now?
-    # TODO single image? extract examples for classifier???
-    dataset = iTHORDataset("../data/ithor/val_small/", split='val', single_image=True, return_targets=True, return_latents=True)
-    model = BISCUITNF.load_from_checkpoint('../data/ithor/models/BISCUITNF_40l_64hid.ckpt')
+
+    if args.dataset == 'ithor':
+        dataset = iTHORDataset(args.data_dir, split=args.split, single_image=True, return_targets=False,
+                               return_latents=True)
+        model = BISCUITNF.load_from_checkpoint(args.biscuit_checkpoint)
+    else:
+        dataset = VoronoiDataset(args.data_dir, split=args.split, single_image=True, return_targets=False,
+                                 return_latents=True)
+        model = BISCUITVAE.load_from_checkpoint(args.biscuit_checkpoint)
+
     model.to(device)
     model.freeze()
     _ = model.eval()
 
-    causal_encode_runner = RunnerMinimalCausalEncoder()
+    causal_encode_runner = RunnerMinimalCausalEncoder(num_train_epochs=args.max_epochs, log_interval=args.log_interval,
+                                                      checkpoint_path=args.causal_encoder_checkpoint,
+                                                      train_prop=args.train_prop)
     r2 = causal_encode_runner.test_model(model, dataset)
     np.set_printoptions(precision=6, suppress=True)
     print(r2)
 
+
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_dir', type=str, default="../data/ithor/val_small/")
+    parser.add_argument('--split', type=str, default='val')
+    parser.add_argument('--dataset', choices=['voroni', 'ithor'], default='ithor')
+    parser.add_argument('--biscuit_checkpoint', type=str,
+                        default="../data/ithor/models/BISCUITNF_40l_64hid.ckpt")
+    parser.add_argument('--max_epochs', type=int, default=100)
+    parser.add_argument('--log_interval', type=int, default=10)
+    parser.add_argument('--train_prop', type=float, default=0.5)
+    parser.add_argument('--causal_encoder_checkpoint', type=str,
+                        default='pretrained_models/causal_encoder/model.pth')
+    args = parser.parse_args()
+
+    main(args)
