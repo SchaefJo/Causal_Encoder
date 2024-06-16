@@ -16,9 +16,10 @@ from models.biscuit_nf import BISCUITNF
 
 
 class RunnerMinimalCausalEncoder():
-    def __init__(self, num_train_epochs=100, train_prop=0.5, log_interval=10,
+    def __init__(self, num_train_epochs=100, train_prop=0.5, log_interval=10, dataset='ithor',
                  checkpoint_path='pretrained_models/causal_encoder/model.pth'):
         super().__init__()
+        self.dataset = dataset
         self.num_train_epochs = num_train_epochs
         self.train_prop = train_prop
         self.log_interval = log_interval
@@ -87,8 +88,9 @@ class RunnerMinimalCausalEncoder():
             # if multiple images per batch, then train only on last image
             # if len(inps.shape) == 5:
             #    inps = inps[:, -1, :, :, :]
-            ae_output = pl_module.autoencoder.encoder(inps)
-            encs = pl_module.encode(ae_output.to(pl_module.device)).cpu()
+            if self.dataset == 'ithor':
+                inps = pl_module.autoencoder.encoder(inps)
+            encs = pl_module.encode(inps.to(pl_module.device)).cpu()
             all_encs.append(encs)
             all_latents.append(latents)
         all_encs = torch.cat(all_encs, dim=0)
@@ -192,7 +194,7 @@ def main(args):
 
     causal_encode_runner = RunnerMinimalCausalEncoder(num_train_epochs=args.max_epochs, log_interval=args.log_interval,
                                                       checkpoint_path=args.causal_encoder_checkpoint,
-                                                      train_prop=args.train_prop)
+                                                      train_prop=args.train_prop, dataset=args.dataset)
     r2 = causal_encode_runner.test_model(model, dataset)
     np.set_printoptions(precision=6, suppress=True)
     print(r2)
