@@ -37,6 +37,8 @@ class VoronoiDataset(data.Dataset):
             filename += '_triplets'
         self.split_name = filename
         data_file = os.path.join(data_folder, f'{filename}.npz')
+        print(data_file)
+        print(os.path.isfile(data_file))
         if split.startswith('val') and not os.path.isfile(data_file):
             self.split_name = self.split_name.replace('val', 'test')
             print('[!] WARNING: Could not find a validation dataset. Falling back to the standard test set...')
