@@ -301,7 +301,8 @@ if __name__ == '__main__':
                         default='output_causal_encoder/')
     args = parser.parse_args()
 
-    args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'{args.dataset}_{args.split}_{args.train_prop}/')
+    args.causal_encoder_output = os.path.join(args.causal_encoder_output,
+                                              f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}/')
     os.makedirs(os.path.dirname(args.causal_encoder_output), exist_ok=True)
 
     main(args)
