@@ -250,7 +250,7 @@ class RunnerMinimalCausalEncoder():
         max_r2 = r2_matrix.argmax(dim=-1)
         ta = F.one_hot(max_r2, num_classes=r2_matrix.shape[-1]).float()
         # Group multi-dimensional causal variables together
-        if isinstance(args.dataset, iTHORDataset):
+        if isinstance(dataset, iTHORDataset):
             ta = torch.cat([ta[:, :1],
                             ta[:, 1:7].sum(dim=-1, keepdims=True),
                             ta[:, 7:9],
