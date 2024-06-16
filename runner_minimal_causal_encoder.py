@@ -3,6 +3,7 @@ from collections import OrderedDict
 
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
 from tqdm import tqdm
 import torch.nn.functional as F
 from experiments.datasets import iTHORDataset, VoronoiDataset
@@ -13,22 +14,20 @@ import sys
 from datetime import datetime
 import os
 from models.biscuit_nf import BISCUITNF
-
+import seaborn as sns
 
 class RunnerMinimalCausalEncoder():
     def __init__(self, num_train_epochs=100, train_prop=0.5, log_interval=10, dataset='ithor',
-                 checkpoint_path='pretrained_models/causal_encoder/model.pth'):
+                 checkpoint_path='pretrained_models/causal_encoder/'):
         super().__init__()
         self.dataset = dataset
         self.num_train_epochs = num_train_epochs
         self.train_prop = train_prop
         self.log_interval = log_interval
-        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
-        checkpoint_array = checkpoint_path.split('.')
         current_time = datetime.now()
-        date_time_str = current_time.strftime('%d.%m._%H:%M:%S')
-        self.checkpoint_path = ''.join(['.'.join(checkpoint_array[:-1])] + ['_', date_time_str, '.'] + \
-                                       checkpoint_array[-1:])
+        self.date_time_str = current_time.strftime('%d.%m._%H:%M:%S')
+
+        self.checkpoint_path = checkpoint_path
 
         self.cluster = False
         self.log_postfix = ''
@@ -73,7 +72,8 @@ class RunnerMinimalCausalEncoder():
             if epoch_idx % self.log_interval == 0:
                 avg_loss /= len(train_loader)
                 print(f'Epoch [{epoch_idx}/{self.num_train_epochs}], Loss: {avg_loss:.4f}')
-        torch.save(encoder.state_dict(), self.checkpoint_path)
+        model_path = os.path.join(self.checkpoint_path, f'model_{self.date_time_str}.pth')
+        torch.save(encoder.state_dict(), model_path)
         print(f'Model checkpoint saved at {self.checkpoint_path}')
         return encoder
 
@@ -120,13 +120,13 @@ class RunnerMinimalCausalEncoder():
             pred_dict[key] = pred_dict[key].cpu()
         _, dists, norm_dists = encoder.calculate_loss_distance(pred_dict, test_exp_labels)
         # Calculate statistics (R^2, pearson, etc.)
-        avg_norm_dists, r2_matrix = self.log_R2_statistic(encoder, test_labels, norm_dists, )
+        avg_norm_dists, r2_matrix = self.log_R2_statistic(encoder, test_labels, norm_dists, pl_module)
         # self.log_Spearman_statistics(trainer, encoder, pred_dict, test_labels, pl_module=pl_module)
         if is_training:
             pl_module = pl_module.train()
         return r2_matrix
 
-    def log_R2_statistic(self, encoder, test_labels, norm_dists):
+    def log_R2_statistic(self, encoder, test_labels, norm_dists, pl_module):
         avg_pred_dict = OrderedDict()
         for i, var_key in enumerate(encoder.hparams.causal_var_info):
             var_info = encoder.hparams.causal_var_info[var_key]
@@ -157,14 +157,53 @@ class RunnerMinimalCausalEncoder():
             r2_matrix.append(r2)
         r2_matrix = [r2.detach() for r2 in r2_matrix]
         r2_matrix = torch.stack(r2_matrix, dim=-1).cpu().numpy()
-        # log_matrix(r2_matrix, trainer, 'r2_matrix' + self.log_postfix)
-        # self._log_heatmap(trainer=trainer,
-        #                  values=r2_matrix,
-        #                  tag='r2_matrix',
-        #                  title='R^2 Matrix',
-        #                  xticks=[key for key in encoder.hparams.causal_var_info],
-        #                  pl_module=pl_module)
+        self.log_matrix(r2_matrix)
+        self._log_heatmap(values=r2_matrix,
+                         tag='r2_matrix',
+                         title='R^2 Matrix',
+                         xticks=[key for key in encoder.hparams.causal_var_info],
+                         pl_module=pl_module)
         return avg_norm_dists, r2_matrix
+
+    def _log_heatmap(self, values, tag, title=None, xticks=None, yticks=None, xlabel=None, ylabel=None, pl_module=None):
+        if ylabel is None:
+            ylabel = 'Target dimension'
+        if xlabel is None:
+            xlabel = 'True causal variable'
+        if yticks is None:
+            yticks = [f'Dim {i+1}' for i in range(values.shape[0])]
+        if xticks is None:
+            xticks = self.dataset.target_names()
+        fig = plt.figure(figsize=(min(6, max(4, values.shape[1]/1.25)),
+                                  min(6, max(4, values.shape[0]/1.25))),
+                         dpi=150)
+        sns.heatmap(values, annot=min(values.shape) < 10,
+                    yticklabels=yticks,
+                    xticklabels=xticks,
+                    vmin=0.0,
+                    vmax=1.0,
+                    fmt='3.2f')
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        if title is not None:
+            plt.title(title)
+        fig.tight_layout()
+        heatmap_path = os.path.join(self.checkpoint_path, f'heatmap_{self.date_time_str}.png')
+        plt.savefig(heatmap_path)
+        plt.close(fig)
+
+        # if values.shape[0] == values.shape[1] + 1:
+        #     values = values[:-1]
+        #
+        # if values.shape[0] == values.shape[1]:
+        #     avg_diag = np.diag(values).mean()
+        #     max_off_diag = (values - np.eye(values.shape[0]) * 10).max(axis=-1).mean()
+        #     if pl_module is None:
+        #         trainer.logger.experiment.add_scalar(f'corr_callback_{tag}_diag{self.log_postfix}', avg_diag, global_step=trainer.global_step)
+        #         trainer.logger.experiment.add_scalar(f'corr_callback_{tag}_max_off_diag{self.log_postfix}', max_off_diag, global_step=trainer.global_step)
+        #     else:
+        #         pl_module.log(f'corr_callback_{tag}_diag{self.log_postfix}', avg_diag)
+        #         pl_module.log(f'corr_callback_{tag}_max_off_diag{self.log_postfix}', max_off_diag)
 
     def _prepare_input(self, inps, target_assignment, latents, flatten_inp=True):
         ta = target_assignment.detach()[None, :, :].expand(inps.shape[0], -1, -1)
@@ -174,6 +213,31 @@ class RunnerMinimalCausalEncoder():
             inps = inps.flatten(0, 1)
             latents = latents.flatten(0, 1)
         return inps, latents
+
+    def log_matrix(self, matrix):
+        """ Saves a numpy array to the logging directory """
+        filename = os.path.join(self.checkpoint_path, f'r2_{self.date_time_str}.pth')
+
+        new_epoch = np.array([self.num_train_epochs])
+        new_val = matrix[None]
+        if os.path.isfile(filename):
+            prev_data = np.load(filename)
+            epochs, values = prev_data['epochs'], prev_data['values']
+            for i in [1, 2]:
+                if values.shape[i] > new_val.shape[i]:
+                    pad_shape = list(values.shape)
+                    pad_shape[i] -= new_val.shape[i]
+                    new_val = np.concatenate([new_val, np.zeros(pad_shape, dtype=new_val.dtype)], axis=i)
+                elif values.shape[i] < new_val.shape[i]:
+                    pad_shape = list(new_val.shape)
+                    pad_shape[i] -= values.shape[i]
+                    values = np.concatenate([values, np.zeros(pad_shape, dtype=values.dtype)], axis=i)
+            epochs = np.concatenate([epochs, new_epoch], axis=0)
+            values = np.concatenate([values, new_val], axis=0)
+        else:
+            epochs = new_epoch
+            values = new_val
+        np.savez_compressed(filename, epochs=epochs, values=values)
 
 
 def main(args):
@@ -193,7 +257,7 @@ def main(args):
     _ = model.eval()
 
     causal_encode_runner = RunnerMinimalCausalEncoder(num_train_epochs=args.max_epochs, log_interval=args.log_interval,
-                                                      checkpoint_path=args.causal_encoder_checkpoint,
+                                                      checkpoint_path=args.causal_encoder_output,
                                                       train_prop=args.train_prop, dataset=args.dataset)
     r2 = causal_encode_runner.test_model(model, dataset)
     np.set_printoptions(precision=6, suppress=True)
@@ -207,11 +271,14 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', choices=['voroni', 'ithor'], default='ithor')
     parser.add_argument('--biscuit_checkpoint', type=str,
                         default="../data/ithor/models/BISCUITNF_40l_64hid.ckpt")
-    parser.add_argument('--max_epochs', type=int, default=100)
-    parser.add_argument('--log_interval', type=int, default=10)
+    parser.add_argument('--max_epochs', type=int, default=5)
+    parser.add_argument('--log_interval', type=int, default=1)
     parser.add_argument('--train_prop', type=float, default=0.5)
-    parser.add_argument('--causal_encoder_checkpoint', type=str,
-                        default='pretrained_models/causal_encoder/model.pth')
+    parser.add_argument('--causal_encoder_output', type=str,
+                        default='output_causal_encoder/')
     args = parser.parse_args()
+
+    args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'{args.dataset}_{args.split}_{args.train_prop}/')
+    os.makedirs(os.path.dirname(args.causal_encoder_output), exist_ok=True)
 
     main(args)
