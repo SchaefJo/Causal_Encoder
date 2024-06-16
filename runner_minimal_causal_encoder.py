@@ -32,7 +32,7 @@ class RunnerMinimalCausalEncoder():
         self.cluster = False
         self.log_postfix = ''
 
-    def train_network(self, pl_module, train_dataset, target_assignment):
+    def train_network(self, pl_module, train_dataset, target_assignment, name):
         device = pl_module.device
         if hasattr(pl_module, 'causal_encoder') and pl_module.causal_encoder is not None:
             causal_var_info = pl_module.causal_encoder.hparams.causal_var_info
@@ -72,12 +72,12 @@ class RunnerMinimalCausalEncoder():
             if epoch_idx % self.log_interval == 0:
                 avg_loss /= len(train_loader)
                 print(f'Epoch [{epoch_idx}/{self.num_train_epochs}], Loss: {avg_loss:.4f}')
-        model_path = os.path.join(self.checkpoint_path, f'model_{self.date_time_str}.pth')
+        model_path = os.path.join(self.checkpoint_path, f'model_{name}_{self.date_time_str}.pth')
         torch.save(encoder.state_dict(), model_path)
         print(f'Model checkpoint saved at {self.checkpoint_path}')
         return encoder
 
-    def test_model(self, pl_module, dataset):
+    def test_model(self, pl_module, dataset, name):
         # Encode whole dataset with pl_module
         is_training = pl_module.training
         pl_module = pl_module.eval()
@@ -109,7 +109,7 @@ class RunnerMinimalCausalEncoder():
             target_assignment = pl_module.target_assignment.clone()
         else:
             target_assignment = torch.eye(all_encs.shape[-1])
-        encoder = self.train_network(pl_module, train_dataset, target_assignment)
+        encoder = self.train_network(pl_module, train_dataset, target_assignment, name)
         encoder.eval()
         # Record predictions of model on test and calculate distances
         test_inps, test_labels = all_encs[test_dataset.indices], all_latents[test_dataset.indices]
@@ -120,13 +120,13 @@ class RunnerMinimalCausalEncoder():
             pred_dict[key] = pred_dict[key].cpu()
         _, dists, norm_dists = encoder.calculate_loss_distance(pred_dict, test_exp_labels)
         # Calculate statistics (R^2, pearson, etc.)
-        avg_norm_dists, r2_matrix = self.log_R2_statistic(encoder, test_labels, norm_dists, pl_module)
+        avg_norm_dists, r2_matrix = self.log_R2_statistic(encoder, test_labels, norm_dists, pl_module, name)
         # self.log_Spearman_statistics(trainer, encoder, pred_dict, test_labels, pl_module=pl_module)
         if is_training:
             pl_module = pl_module.train()
         return r2_matrix
 
-    def log_R2_statistic(self, encoder, test_labels, norm_dists, pl_module):
+    def log_R2_statistic(self, encoder, test_labels, norm_dists, pl_module, name):
         avg_pred_dict = OrderedDict()
         for i, var_key in enumerate(encoder.hparams.causal_var_info):
             var_info = encoder.hparams.causal_var_info[var_key]
@@ -157,15 +157,16 @@ class RunnerMinimalCausalEncoder():
             r2_matrix.append(r2)
         r2_matrix = [r2.detach() for r2 in r2_matrix]
         r2_matrix = torch.stack(r2_matrix, dim=-1).cpu().numpy()
-        self.log_matrix(r2_matrix)
+        self.log_matrix(r2_matrix, name)
         self._log_heatmap(values=r2_matrix,
                          tag='r2_matrix',
                          title='R^2 Matrix',
                          xticks=[key for key in encoder.hparams.causal_var_info],
-                         pl_module=pl_module)
+                         pl_module=pl_module, name=name)
         return avg_norm_dists, r2_matrix
 
-    def _log_heatmap(self, values, tag, title=None, xticks=None, yticks=None, xlabel=None, ylabel=None, pl_module=None):
+    def _log_heatmap(self, values, tag, title=None, xticks=None, yticks=None, xlabel=None, ylabel=None, pl_module=None,
+                     name=''):
         if ylabel is None:
             ylabel = 'Target dimension'
         if xlabel is None:
@@ -188,7 +189,7 @@ class RunnerMinimalCausalEncoder():
         if title is not None:
             plt.title(title)
         fig.tight_layout()
-        heatmap_path = os.path.join(self.checkpoint_path, f'heatmap_{self.date_time_str}.png')
+        heatmap_path = os.path.join(self.checkpoint_path, f'heatmap_{name}_{self.date_time_str}.png')
         plt.savefig(heatmap_path)
         plt.close(fig)
 
@@ -214,9 +215,9 @@ class RunnerMinimalCausalEncoder():
             latents = latents.flatten(0, 1)
         return inps, latents
 
-    def log_matrix(self, matrix):
+    def log_matrix(self, matrix, name):
         """ Saves a numpy array to the logging directory """
-        filename = os.path.join(self.checkpoint_path, f'r2_{self.date_time_str}.pth')
+        filename = os.path.join(self.checkpoint_path, f'{name}_{self.date_time_str}.pth')
 
         new_epoch = np.array([self.num_train_epochs])
         new_val = matrix[None]
@@ -240,6 +241,26 @@ class RunnerMinimalCausalEncoder():
         np.savez_compressed(filename, epochs=epochs, values=values)
 
 
+    def first_r2_matrix(self, model, dataset, name):
+        r2 = self.test_model(model, dataset, name)
+        np.set_printoptions(precision=6, suppress=True)
+        r2_matrix = torch.from_numpy(r2)
+        # Assign each latent to the causal variable with the highest (relative) correlation
+        r2_matrix = r2_matrix / r2_matrix.abs().max(dim=0, keepdims=True).values.clamp(min=0.1)
+        max_r2 = r2_matrix.argmax(dim=-1)
+        ta = F.one_hot(max_r2, num_classes=r2_matrix.shape[-1]).float()
+        # Group multi-dimensional causal variables together
+        if isinstance(args.dataset, iTHORDataset):
+            ta = torch.cat([ta[:, :1],
+                            ta[:, 1:7].sum(dim=-1, keepdims=True),
+                            ta[:, 7:9],
+                            ta[:, 9:13].sum(dim=-1, keepdims=True),
+                            ta[:, 13:]], dim=-1)
+
+        model.target_assignment = ta
+        model.last_target_assignment.data = ta
+
+
 def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -259,9 +280,11 @@ def main(args):
     causal_encode_runner = RunnerMinimalCausalEncoder(num_train_epochs=args.max_epochs, log_interval=args.log_interval,
                                                       checkpoint_path=args.causal_encoder_output,
                                                       train_prop=args.train_prop, dataset=args.dataset)
-    r2 = causal_encode_runner.test_model(model, dataset)
-    np.set_printoptions(precision=6, suppress=True)
-    print(r2)
+
+    r2_start = causal_encode_runner.first_r2_matrix(model, dataset, 'first_R2')
+    r2_end = causal_encode_runner.test_model(model, dataset, 'second_R2')
+
+
 
 
 if __name__ == '__main__':
