@@ -100,6 +100,7 @@ class RunnerMinimalCausalEncoder():
         # Create new tensor dataset for training (50%) and testing (50%)
         full_dataset = data.TensorDataset(all_encs, all_latents)
         train_size = int(self.train_prop * all_encs.shape[0])
+        print(f'Train Size {train_size}')
         test_size = all_encs.shape[0] - train_size
         train_dataset, test_dataset = data.random_split(full_dataset,
                                                         lengths=[train_size, test_size],
