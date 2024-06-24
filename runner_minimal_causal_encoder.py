@@ -18,12 +18,13 @@ import seaborn as sns
 
 class RunnerMinimalCausalEncoder():
     def __init__(self, num_train_epochs=100, train_prop=0.5, log_interval=10, dataset='ithor',
-                 checkpoint_path='pretrained_models/causal_encoder/'):
+                 checkpoint_path='pretrained_models/causal_encoder/', disentangled=True):
         super().__init__()
         self.dataset = dataset
         self.num_train_epochs = num_train_epochs
         self.train_prop = train_prop
         self.log_interval = log_interval
+        self.disentangled = disentangled
         current_time = datetime.now()
         self.date_time_str = current_time.strftime('%d.%m._%H:%M:%S')
 
@@ -88,7 +89,7 @@ class RunnerMinimalCausalEncoder():
             # if multiple images per batch, then train only on last image
             # if len(inps.shape) == 5:
             #    inps = inps[:, -1, :, :, :]
-            if self.dataset == 'ithor':
+            if self.dataset == 'ithor' and self.disentangled:
                 inps = pl_module.autoencoder.encoder(inps)
             encs = pl_module.encode(inps.to(pl_module.device)).cpu()
             all_encs.append(encs)
@@ -273,14 +274,14 @@ def main(args):
         dataset = VoronoiDataset(args.data_dir, split=args.split, single_image=True, return_targets=False,
                                  return_latents=True)
         model = BISCUITVAE.load_from_checkpoint(args.biscuit_checkpoint)
-
     model.to(device)
     model.freeze()
     _ = model.eval()
 
     causal_encode_runner = RunnerMinimalCausalEncoder(num_train_epochs=args.max_epochs, log_interval=args.log_interval,
                                                       checkpoint_path=args.causal_encoder_output,
-                                                      train_prop=args.train_prop, dataset=args.dataset)
+                                                      train_prop=args.train_prop, dataset=args.dataset,
+                                                      disentangled=args.disentangled)
 
     r2_start = causal_encode_runner.first_r2_matrix(model, dataset, 'first_R2')
     r2_end = causal_encode_runner.test_model(model, dataset, 'second_R2')
@@ -300,6 +301,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_prop', type=float, default=0.5)
     parser.add_argument('--causal_encoder_output', type=str,
                         default='output_causal_encoder/')
+    parser.add_argument('--disentangled', type=bool, default=True)
     args = parser.parse_args()
 
     args.causal_encoder_output = os.path.join(args.causal_encoder_output,
@@ -307,3 +309,14 @@ if __name__ == '__main__':
     os.makedirs(os.path.dirname(args.causal_encoder_output), exist_ok=True)
 
     main(args)
+
+    # TODO: is this what the causal encoder does?
+    # - predict (with causal encoder?) a causal state from only one latent
+    # - predict the previous state from all other latents
+
+    # - compare this by a randomly sampled vector (gaussian with mean and variance from all latents vs the correct
+    #   latent; or uniform distribution)
+
+    # check out Anita Mahinpei, Justin Clark, Isaac Lage, Finale Doshi-Velez, and Weiwei Pan. Promises
+    # and pitfalls of black-box concept learning models.
+    # Read Locatello challenging common assumptions in the unsupervised learning of disentangled representations
