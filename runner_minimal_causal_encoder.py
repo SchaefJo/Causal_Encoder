@@ -300,7 +300,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default="../data/ithor/val_small/")
     parser.add_argument('--split', type=str, default='val')
-    parser.add_argument('--dataset', choices=['voroni', 'ithor'], default='ithor')
+    parser.add_argument('--dataset', choices=['voronoi', 'ithor'], default='ithor')
     parser.add_argument('--biscuit_checkpoint', type=str,
                         default="../data/ithor/models/BISCUITNF_40l_64hid.ckpt")
     parser.add_argument('--max_epochs', type=int, default=5)
