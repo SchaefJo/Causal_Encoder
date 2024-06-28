@@ -89,9 +89,14 @@ class RunnerMinimalCausalEncoder():
             # if multiple images per batch, then train only on last image
             # if len(inps.shape) == 5:
             #    inps = inps[:, -1, :, :, :]
-            if self.dataset == 'ithor' and self.disentangled:
+            if self.dataset == 'ithor':
                 inps = pl_module.autoencoder.encoder(inps)
-            encs = pl_module.encode(inps.to(pl_module.device)).cpu()
+            if self.disentangled:
+                encs = pl_module.encode(inps.to(pl_module.device)).cpu()
+            else:
+                if self.dataset == 'voronoi':
+                    raise NotImplementedError('this is not implemented yet!')
+                encs = inps
             all_encs.append(encs)
             all_latents.append(latents)
         all_encs = torch.cat(all_encs, dim=0)
@@ -244,6 +249,8 @@ class RunnerMinimalCausalEncoder():
 
 
     def first_r2_matrix(self, model, dataset, name):
+        # TODO does this change something???
+        # pl_module.target_assignment = None
         r2 = self.test_model(model, dataset, name)
         np.set_printoptions(precision=6, suppress=True)
         r2_matrix = torch.from_numpy(r2)
