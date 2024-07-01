@@ -92,8 +92,10 @@ class RunnerMinimalCausalEncoder():
             if self.dataset == 'ithor':
                 inps = pl_module.autoencoder.encoder(inps)
             if self.disentangled:
+                print('State disentangled')
                 encs = pl_module.encode(inps.to(pl_module.device)).cpu()
             else:
+                print('State entangled')
                 if self.dataset == 'voronoi':
                     raise NotImplementedError('this is not implemented yet!')
                 encs = inps
@@ -312,7 +314,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     args.causal_encoder_output = os.path.join(args.causal_encoder_output,
-                                              f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}/')
+                                              f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_{args.disentangled}/')
     os.makedirs(os.path.dirname(args.causal_encoder_output), exist_ok=True)
 
     main(args)
