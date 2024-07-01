@@ -183,7 +183,7 @@ class LabelEvaluation():
             spearman_matrix.append(results)
 
         spearman_matrix = torch.stack(spearman_matrix, dim=-1).cpu().numpy()
-        log_matrix(spearman_matrix, trainer, 'spearman_matrix' + self.log_postfix)
+        #log_matrix(spearman_matrix, trainer, 'spearman_matrix' + self.log_postfix)
         self._log_heatmap(trainer=trainer,
                           values=spearman_matrix,
                           tag='spearman_matrix',
@@ -397,70 +397,65 @@ def main():
 
     DataClass = iTHORDataset
 
-    Evaluate_Label(model, DataClass, args.data_dir)
+    Evaluate_Label(model, DataClass, args.data_dir, args.train_prop)
 
 
-def Evaluate_Label(model, DataClass, DATA_FOLDER):
+def Evaluate_Label(model, DataClass, DATA_FOLDER, train_prop):
     batch_size = 64
 
     val_dataset = DataClass(
         data_folder=DATA_FOLDER, split='val', single_image=True, return_targets=False, return_latents=True)
     LE = LabelEvaluation(val_dataset, num_train_epochs=100)
 
-    # props = np.arange(0.0001, 0.001, 0.0001)
-    # props = np.arange(0.001, 0.01, 0.001)
-    # props = np.arange(0.01, 0.1, 0.01)
-    #props = np.arange(0.001, 1, 0.001)
-    props = [0.1, 0.5]
+
     r2_diag = []
     r2_sep = []
-    for prop in props:
-        r2_matrix_start = LE.on_validation_epoch_start(model, is_test=False, prop=prop)
-        # print(f"r2_matrix_start: {r2_matrix_start.shape}")
+    r2_matrix_start = LE.on_validation_epoch_start(model, is_test=False, prop=train_prop)
+    # print(f"r2_matrix_start: {r2_matrix_start.shape}")
 
-        r2_matrix_end = LE.on_validation_epoch_end(model, is_test=False, prop=prop)
-        # print(f"r2_matrix_end: {r2_matrix_end.shape}, {r2_matrix_end.dtype}")
-        # print(isinstance(r2_matrix_end, torch.Tensor))
+    r2_matrix_end = LE.on_validation_epoch_end(model, is_test=False, prop=train_prop)
+    # print(f"r2_matrix_end: {r2_matrix_end.shape}, {r2_matrix_end.dtype}")
+    # print(isinstance(r2_matrix_end, torch.Tensor))
 
-        r2_matrix_end = torch.from_numpy(r2_matrix_end)
-        if isinstance(val_dataset, iTHORDataset):
-            r2_matrix_end = torch.cat([r2_matrix_end[:, :1],
-                                       r2_matrix_end[:, 1:7].mean(dim=-1, keepdims=True),
-                                       # Combine the latents into the causals
-                                       r2_matrix_end[:, 7:9],
-                                       r2_matrix_end[:, 9:13].mean(dim=-1, keepdims=True),
-                                       r2_matrix_end[:, 13:]], dim=-1)
-        elif isinstance(val_dataset, CausalWorldDataset):
-            r2_matrix_end = torch.cat([r2_matrix_end[:, :6],
-                                       r2_matrix_end[:, 6:].mean(dim=-1, keepdims=True)], dim=-1)
-        avg_diag, max_off_diag = LE._log_heatmap(values=r2_matrix_end.numpy(),
-                                                 tag='r2_matrix',
-                                                 title='R^2 Matrix',
-                                                 xticks=[f'Dim {i + 1}' for i in range(r2_matrix_end.shape[0])],
-                                                 pl_module=model,
-                                                 point="R2_final")
-        r2_diag.append(avg_diag)
-        r2_sep.append(max_off_diag)
+    r2_matrix_end = torch.from_numpy(r2_matrix_end)
+    if isinstance(val_dataset, iTHORDataset):
+        r2_matrix_end = torch.cat([r2_matrix_end[:, :1],
+                                   r2_matrix_end[:, 1:7].mean(dim=-1, keepdims=True),
+                                   # Combine the latents into the causals
+                                   r2_matrix_end[:, 7:9],
+                                   r2_matrix_end[:, 9:13].mean(dim=-1, keepdims=True),
+                                   r2_matrix_end[:, 13:]], dim=-1)
+    elif isinstance(val_dataset, CausalWorldDataset):
+        r2_matrix_end = torch.cat([r2_matrix_end[:, :6],
+                                   r2_matrix_end[:, 6:].mean(dim=-1, keepdims=True)], dim=-1)
+    avg_diag, max_off_diag = LE._log_heatmap(values=r2_matrix_end.numpy(),
+                                             tag='r2_matrix',
+                                             title='R^2 Matrix',
+                                             xticks=[f'Dim {i + 1}' for i in range(r2_matrix_end.shape[0])],
+                                             pl_module=model,
+                                             point="R2_final")
+    r2_diag.append(avg_diag)
+    r2_sep.append(max_off_diag)
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(props, r2_diag, label='Average Diagonal', marker='o')
-    plt.legend()
-    plt.title('R2 Average Diagonal Metric')
-    plt.xlabel('Prop Value')
-    plt.ylabel('Average Diagonal Metric Value')
-    plt.grid(True)
-    #plt.savefig('/home/mguo/BISCUIT/run/images/R2_diag.png')
-    plt.show()
+    # plt.figure(figsize=(10, 5))
+    # plt.plot(props, r2_diag, label='Average Diagonal', marker='o')
+    # plt.legend()
+    # plt.title('R2 Average Diagonal Metric')
+    # plt.xlabel('Prop Value')
+    # plt.ylabel('Average Diagonal Metric Value')
+    # plt.grid(True)
+    # #plt.savefig('/home/mguo/BISCUIT/run/images/R2_diag.png')
+    # plt.show()
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(props, r2_sep, label='Max Off-Diagonal', marker='s')
-    plt.legend()
-    plt.title('R2 Max Off-Diagonal Metric')
-    plt.xlabel('Prop Value')
-    plt.ylabel('Max Off-Diagonal Metric Value')
-    plt.grid(True)
-    #plt.savefig('/home/mguo/BISCUIT/run/images/R2_off_diag.png')
-    plt.show()
+    # plt.figure(figsize=(10, 5))
+    # plt.plot(props, r2_sep, label='Max Off-Diagonal', marker='s')
+    # plt.legend()
+    # plt.title('R2 Max Off-Diagonal Metric')
+    # plt.xlabel('Prop Value')
+    # plt.ylabel('Max Off-Diagonal Metric Value')
+    # plt.grid(True)
+    # #plt.savefig('/home/mguo/BISCUIT/run/images/R2_off_diag.png')
+    # plt.show()
 
     # model.freeze()
     # model.eval()
