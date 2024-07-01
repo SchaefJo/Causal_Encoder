@@ -310,13 +310,16 @@ if __name__ == '__main__':
     parser.add_argument('--train_prop', type=float, default=0.5)
     parser.add_argument('--causal_encoder_output', type=str,
                         default='output_causal_encoder/')
-    parser.add_argument('--disentangled', type=bool, default=True)
+    parser.add_argument('--disentangled', dest='disentangled', action='store_false',
+                        help='If set, disables disentanglement. Default is True.')
     args = parser.parse_args()
+
+    print(args.disentangled)
 
     args.causal_encoder_output = os.path.join(args.causal_encoder_output,
                                               f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}/')
     os.makedirs(os.path.dirname(args.causal_encoder_output), exist_ok=True)
-
+    exit()
     main(args)
 
     # TODO: is this what the causal encoder does?
