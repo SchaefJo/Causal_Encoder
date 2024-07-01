@@ -382,7 +382,7 @@ def main():
     args = parser.parse_args()
 
     args.causal_encoder_output = os.path.join(args.causal_encoder_output,
-                                              f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}/')
+                                              f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}/')
     os.makedirs(os.path.dirname(args.causal_encoder_output), exist_ok=True)
 
     #CHECKPOINT_FILE_AE = '/home/mguo/BISCUIT/pretrained_model/pretrained_models/AE_iTHOR/AE_40l_64hid.ckpt'
