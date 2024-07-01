@@ -86,8 +86,10 @@ class RunnerCausalMLP():
             if self.dataset == 'ithor':
                 inps = pl_module.autoencoder.encoder(inps)
             if self.disentangled:
+                print('Latent space disentangled')
                 encs = pl_module.encode(inps.to(pl_module.device)).cpu()
             else:
+                print('Latent space entangled')
                 if self.dataset == 'voronoi':
                     raise NotImplementedError('this is not implemented yet!')
                 encs = inps
@@ -158,7 +160,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_prop', type=float, default=0.5)
     parser.add_argument('--causal_encoder_output', type=str,
                         default='output_causal_encoder/')
-    parser.add_argument('--disentangled', type=bool, default=True)
+    parser.add_argument('--disentangled', type=bool, default=False)
     args = parser.parse_args()
 
     args.causal_encoder_output = os.path.join(args.causal_encoder_output,
