@@ -310,8 +310,9 @@ if __name__ == '__main__':
     parser.add_argument('--train_prop', type=float, default=0.5)
     parser.add_argument('--causal_encoder_output', type=str,
                         default='output_causal_encoder/')
-    parser.add_argument('--disentangled', dest='disentangled', action='store_false',
-                        help='If set, disables disentanglement. Default is True.')
+    parser.add_argument('--entangled', dest='disentangled', action='store_false',
+                        help='If set, disables disentanglement. Disentanglement is normally on.')
+    parser.set_defaults(disentangled=True)
     args = parser.parse_args()
 
     args.causal_encoder_output = os.path.join(args.causal_encoder_output,
