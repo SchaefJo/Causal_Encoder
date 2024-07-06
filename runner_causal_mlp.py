@@ -1,25 +1,17 @@
 import argparse
-from collections import OrderedDict
-
-import numpy as np
 import torch
-from matplotlib import pyplot as plt
 from tqdm import tqdm
 import torch.nn.functional as F
 from experiments.datasets import iTHORDataset, VoronoiDataset
 from models.biscuit_vae import BISCUITVAE
-from models.shared.causal_encoder import CausalEncoder
 import torch.utils.data as data
-import sys
 from datetime import datetime
 import os
 from models.biscuit_nf import BISCUITNF
-import seaborn as sns
-
 from models.shared.causal_mlp import CausalMLP
 
 
-class RunnerCausalMLP():
+class RunnerCausalMLP:
     def __init__(self, num_train_epochs=100, train_prop=0.5, log_interval=10, dataset='ithor',
                  checkpoint_path='pretrained_models/causal_encoder/', disentangled=True):
         super().__init__()
@@ -36,15 +28,17 @@ class RunnerCausalMLP():
         self.cluster = False
         self.log_postfix = ''
 
-    def train_network(self, pl_module, train_dataset, name):
+    def train_network(self, pl_module, train_dataset, name, causal_var_info):
         device = pl_module.device
 
         # We use one, sufficiently large network that predicts for any input all causal variables
         # To iterate over the different sets, we use a mask which is an extra input to the model
         # This is more efficient than using N networks and showed same results with large hidden size
+
+        # TODO add number of categorical and continous as input
         mlp = CausalMLP(hidden_dim=128,
                         lr=4e-3,
-                        output_dim=18)
+                        output=causal_var_info)
         optimizer = mlp.configure_optimizers()
         if isinstance(optimizer, (list, tuple)):
             optimizer = optimizer[0]
@@ -61,7 +55,7 @@ class RunnerCausalMLP():
                 inps = inps.to(device)
                 latents = latents.to(device)
                 #inps, latents = self._prepare_input(inps, target_assignment, latents)
-                loss = mlp._get_loss(inps, latents)
+                loss = mlp._get_loss(inps, latents, causal_var_info)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -79,6 +73,7 @@ class RunnerCausalMLP():
         is_training = pl_module.training
         pl_module = pl_module.eval()
         loader = data.DataLoader(dataset, batch_size=256, drop_last=False, shuffle=False)
+        causal_var_info = dataset.get_causal_var_info()
         all_encs, all_latents = [], []
         for batch in loader:
             inps, *_, latents = batch
@@ -108,19 +103,20 @@ class RunnerCausalMLP():
                                                         lengths=[train_size, test_size],
                                                         generator=torch.Generator().manual_seed(42))
 
-        encoder = self.train_network(pl_module, train_dataset, name)
+        encoder = self.train_network(pl_module, train_dataset, name, causal_var_info)
         encoder.eval()
 
         # Record predictions of model on test and calculate distances
         test_inps, test_labels = all_encs[test_dataset.indices], all_latents[test_dataset.indices]
-        #test_exp_inps, test_exp_labels = self._prepare_input(test_inps, target_assignment.cpu(), test_labels,
-        #                                                     flatten_inp=False)
-        pred = encoder.forward(test_inps.to(pl_module.device))
 
-        loss = F.mse_loss(pred, test_labels)
-        print(f'MSE loss: {loss.item()}')
+        test_inps = test_inps.to(pl_module.device)
+        test_labels = test_labels.to(pl_module.device)
 
-        return loss
+        with torch.no_grad():
+            comb_loss = encoder._get_loss(test_inps, test_labels, dataset.get_causal_var_info())
+        print(f'Comb loss: {comb_loss.item()}')
+
+        return comb_loss
 
 
 def main(args):
