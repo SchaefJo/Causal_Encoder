@@ -15,7 +15,6 @@ from experiments.utils import train_model, load_datasets, get_default_parser, pr
 if __name__ == '__main__':
     parser = get_default_parser()
     parser.add_argument('--c_hid', type=int, default=64)
-    parser.add_argument('--max_epochs', type=int, default=200)
     parser.add_argument('--decoder_num_blocks', type=int, default=1)
     parser.add_argument('--act_fn', type=str, default='silu')
     parser.add_argument('--num_latents', type=int, default=16)
