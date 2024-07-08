@@ -181,8 +181,13 @@ class VAE(pl.LightningModule):
         if len(batch) == 2:
             imgs, action = batch
             labels = imgs
-        else:
+        elif len(batch) == 3:
             imgs, labels, action = batch
+        elif len(batch) == 1:
+            imgs = batch
+        else:
+            print('Invalid list length for VAE')
+            raise ValueError
 
         z_mean, z_logstd = self.encoder(imgs)
         z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
