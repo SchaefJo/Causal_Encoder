@@ -35,12 +35,12 @@ if __name__ == '__main__':
         assert False, 'Unknown dataset'
 
     train_dataset = DataClass(
-        data_folder=args.data_dir, split='train', single_image=True, seq_len=1, cluster=args.cluster)
+        data_folder=args.data_dir, split='train', single_image=True, seq_len=1, cluster=args.cluster, return_targets=False)
     val_dataset = DataClass(
-        data_folder=args.data_dir, split='val', single_image=True, seq_len=1, cluster=args.cluster)
+        data_folder=args.data_dir, split='val', single_image=True, seq_len=1, cluster=args.cluster, return_targets=False)
     test_dataset = DataClass(
         data_folder=args.data_dir, split='test_indep', single_image=True, seq_len=1,
-        causal_vars=train_dataset.target_names(), cluster=args.cluster)
+        causal_vars=train_dataset.target_names(), cluster=args.cluster, return_targets=False)
     train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
                                    shuffle=True, pin_memory=True, drop_last=True, num_workers=args.num_workers)
     val_loader = data.DataLoader(val_dataset, batch_size=args.batch_size,
