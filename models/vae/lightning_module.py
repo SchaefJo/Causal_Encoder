@@ -147,7 +147,7 @@ class VAE(pl.LightningModule):
         # Full encoding and decoding of samples
         print(x)
         for i in x:
-            print(x.shape)
+            print(i.shape)
         exit()
         z_mean, z_logstd = self.encoder(x)
         z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
