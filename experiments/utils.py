@@ -213,13 +213,6 @@ def train_model(model_class, train_loader, val_loader,
         pl.seed_everything(seed)  # To be reproducable
         model = model_class(**kwargs)
 
-        sample_batch_train = next(iter(train_loader))
-        sample_batch_val = next(iter(val_loader))
-        output_train = model(sample_batch_train)
-        output_val = model(sample_batch_val)
-        print('forward test')
-        print(output_train)
-        print(output_val)
         if op_before_running is not None:
             model.to(get_device())
             op_before_running(model)
