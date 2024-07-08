@@ -161,6 +161,9 @@ def train_model(model_class, train_loader, val_loader,
         trainer_args['logger'] = logger
     if progress_bar_refresh_rate == 0:
         trainer_args['enable_progress_bar'] = False
+    else:
+        trainer_args['enable_progress_bar'] = True
+
     print(3)
     if callback_kwargs is None:
         callback_kwargs = dict()
@@ -186,8 +189,6 @@ def train_model(model_class, train_loader, val_loader,
                          callbacks=callbacks,
                          check_val_every_n_epoch=check_val_every_n_epoch,
                          gradient_clip_val=gradient_clip_val,
-                         enable_progress_bar=True,
-                         enable_model_summary=True,
                          **trainer_args)
     trainer.logger._default_hp_metric = None
     print(7)
