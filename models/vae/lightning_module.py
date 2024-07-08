@@ -183,17 +183,13 @@ class VAE(pl.LightningModule):
             labels = imgs
         elif len(batch) == 3:
             imgs, labels, action = batch
-        elif len(batch) == 1:
-            imgs = batch
         else:
-            print('Invalid list length for VAE')
-            print(len(batch))
             imgs = batch
 
         z_mean, z_logstd = self.encoder(imgs)
         z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
         x_rec = self.decoder(z_sample)
-        loss = self.loss_function(labels, x_rec, z_mean, z_logstd)
+        loss = self.loss_function(imgs, x_rec, z_mean, z_logstd)
         return loss
 
     def training_step(self, batch, batch_idx):
