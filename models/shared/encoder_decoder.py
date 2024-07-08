@@ -259,7 +259,7 @@ class SimpleEncoder(nn.Module):
     def forward(self, x):
         if isinstance(x, list):
             x = torch.stack(x, dim=0)
-        print(f"Type of x: {type(x)}, Shape of x: {x.shape}")
+        print(f"Encoder: Type of x: {type(x)}, Shape of x: {x.shape}")
         feats = self.net(x)
         return feats
 
