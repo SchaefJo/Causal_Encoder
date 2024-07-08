@@ -176,8 +176,6 @@ class VAE(pl.LightningModule):
         return reconstruction_loss + kld
 
     def _get_loss(self, batch, mode='train'):
-        print(batch)
-        print(batch.shape)
         if len(batch) == 2:
             imgs, action = batch
             labels = imgs

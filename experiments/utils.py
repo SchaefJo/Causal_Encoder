@@ -184,7 +184,7 @@ def train_model(model_class, train_loader, val_loader,
                          accelerator='gpu' if torch.cuda.is_available() else 'cpu', 
                          devices=1,
                          max_epochs=max_epochs,
-                         #callbacks=callbacks,
+                         callbacks=callbacks,
                          check_val_every_n_epoch=check_val_every_n_epoch,
                          gradient_clip_val=gradient_clip_val,
                          **trainer_args)
