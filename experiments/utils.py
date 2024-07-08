@@ -214,21 +214,26 @@ def train_model(model_class, train_loader, val_loader,
         if load_pretrained:
             print("Warning: Could not load any pretrained models despite", load_pretrained)
         pl.seed_everything(seed)  # To be reproducable
+        print(11)
         model = model_class(**kwargs)
         if op_before_running is not None:
+            print(12)
             model.to(get_device())
             op_before_running(model)
         if compile:
+            print(13)
             if hasattr(torch, 'compile'):
                 model = torch.compile(model)
             else:
                 print('Warning: PyTorch version does not support compilation. Skipping...')
+        print(14)
         trainer.fit(model, train_loader, val_loader)
+        print(15)
         model = model_class.load_from_checkpoint(
             trainer.checkpoint_callback.best_model_path)  # Load best checkpoint after training
-    print(11)
+    print(16)
     if test_loader is not None:
-        print(12)
+        print(17)
         model_paths = [(trainer.checkpoint_callback.best_model_path, "best")]
         if save_last_model:
             model_paths += [(trainer.checkpoint_callback.last_model_path, "last")]
