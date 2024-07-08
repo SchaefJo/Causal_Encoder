@@ -145,9 +145,10 @@ class VAE(pl.LightningModule):
 
     def forward(self, x):
         # Full encoding and decoding of samples
-        if isinstance(x, list):
-            x = torch.stack(x, dim=0)
-        print(f"VAE input: Type of x: {type(x)}, Shape of x: {x.shape}")
+        print(x)
+        for i in x:
+            print(x.shape)
+        exit()
         z_mean, z_logstd = self.encoder(x)
         z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
         x_rec = self.decoder(z_sample)
