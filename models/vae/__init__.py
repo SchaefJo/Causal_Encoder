@@ -1,0 +1,1 @@
+from models.vae.lightning_module import VAE

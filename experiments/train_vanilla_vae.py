@@ -4,7 +4,7 @@ Run file to train BISCUIT-VAE
 
 import sys
 sys.path.append('../')
-from models.shared import VAE
+from models.vae import VAE
 from experiments.utils import train_model, load_datasets, get_default_parser, print_params
 
 

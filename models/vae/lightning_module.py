@@ -8,27 +8,46 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from collections import defaultdict
 
 import sys
+
 sys.path.append('../')
-from models.shared import CosineWarmupScheduler, get_act_fn, Encoder, Decoder, SimpleEncoder, SimpleDecoder, VAESplit, ImageLogCallback, PermutationCorrelationMetricsLogCallback
+from models.shared import CosineWarmupScheduler, get_act_fn, Encoder, Decoder, SimpleEncoder, SimpleDecoder, VAESplit, \
+    ImageLogCallback, PermutationCorrelationMetricsLogCallback
 from models.shared import AutoregNormalizingFlow, gaussian_log_prob
 from models.shared import create_interaction_prior, InteractionVisualizationCallback
+
+
+def get_callbacks(exmp_inputs=None, dataset=None, cluster=False, correlation_dataset=None,
+                  correlation_test_dataset=None, action_data_loader=None, **kwargs):
+    callbacks = [LearningRateMonitor('step')]
+    if exmp_inputs is not None:
+        img_callback = ImageLogCallback(exmp_inputs, dataset, every_n_epochs=10 if not cluster else 50,
+                                        cluster=cluster)
+        callbacks.append(img_callback)
+    if correlation_dataset is not None:
+        corr_callback = PermutationCorrelationMetricsLogCallback(correlation_dataset, cluster=cluster,
+                                                                 test_dataset=correlation_test_dataset)
+        callbacks.append(corr_callback)
+    if action_data_loader is not None:
+        actionvq_callback = InteractionVisualizationCallback(action_data_loader=action_data_loader)
+        callbacks.append(actionvq_callback)
+    return callbacks
 
 
 class VAE(pl.LightningModule):
     """ The main module implementing BISCUIT-VAE """
 
     def __init__(self, c_hid, num_latents, lr, action_size=-1,
-                       warmup=100, max_iters=100000,
-                       img_width=64,
-                       c_in=3,
-                       decoder_num_blocks=1,
-                       act_fn='silu',
-                       no_encoder_decoder=False,
-                       linear_encoder_decoder=False,
-                       use_flow_prior=True,
-                       decoder_latents=-1,
-                       prior_action_add_prev_state=False,
-                       **kwargs):
+                 warmup=100, max_iters=100000,
+                 img_width=64,
+                 c_in=3,
+                 decoder_num_blocks=1,
+                 act_fn='silu',
+                 no_encoder_decoder=False,
+                 linear_encoder_decoder=False,
+                 use_flow_prior=True,
+                 decoder_latents=-1,
+                 prior_action_add_prev_state=False,
+                 **kwargs):
         """
         Parameters
         ----------
@@ -103,17 +122,17 @@ class VAE(pl.LightningModule):
                                              num_latents=self.hparams.num_latents)
             else:
                 self.encoder = Encoder(num_latents=self.hparams.num_latents,
-                                          c_hid=self.hparams.c_hid,
-                                          c_in=self.hparams.c_in,
-                                          width=self.hparams.img_width,
-                                          act_fn=act_fn_func,
-                                          variational=True)
+                                       c_hid=self.hparams.c_hid,
+                                       c_in=self.hparams.c_in,
+                                       width=self.hparams.img_width,
+                                       act_fn=act_fn_func,
+                                       variational=True)
                 self.decoder = Decoder(num_latents=self.hparams.decoder_latents,
-                                          c_hid=self.hparams.c_hid,
-                                          c_out=self.hparams.c_in,
-                                          width=self.hparams.img_width,
-                                          num_blocks=self.hparams.decoder_num_blocks,
-                                          act_fn=act_fn_func)
+                                       c_hid=self.hparams.c_hid,
+                                       c_out=self.hparams.c_in,
+                                       width=self.hparams.img_width,
+                                       num_blocks=self.hparams.decoder_num_blocks,
+                                       act_fn=act_fn_func)
 
         # Logging
         self.all_val_dists = defaultdict(list)
@@ -134,8 +153,6 @@ class VAE(pl.LightningModule):
             z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
         else:
             z_sample = z_mean
-        if self.hparams.use_flow_prior:
-            z_sample, _ = self.flow(z_sample)
         return z_sample
 
     def configure_optimizers(self):
@@ -171,7 +188,6 @@ class VAE(pl.LightningModule):
         loss = self.loss_function(labels, x_rec, z_mean, z_logstd)
         return loss
 
-
     def training_step(self, batch, batch_idx):
         loss = self._get_loss(batch, mode='train')
         self.log('train_loss', loss)
@@ -187,20 +203,23 @@ class VAE(pl.LightningModule):
         loss = self._get_loss(batch, mode='test')
         self.log('test_loss', loss)
         return loss
-    
+
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         # Need to do it explicitly since the size of the last_target_assignment might have changed
         if 'last_target_assignment' in checkpoint['state_dict']:
             self.last_target_assignment.data = checkpoint['state_dict']['last_target_assignment']
 
     @staticmethod
-    def get_callbacks(exmp_inputs=None, dataset=None, cluster=False, correlation_dataset=None, correlation_test_dataset=None, action_data_loader=None, **kwargs):
+    def get_callbacks(exmp_inputs=None, dataset=None, cluster=False, correlation_dataset=None,
+                      correlation_test_dataset=None, action_data_loader=None, **kwargs):
         callbacks = [LearningRateMonitor('step')]
         if exmp_inputs is not None:
-            img_callback = ImageLogCallback(exmp_inputs, dataset, every_n_epochs=10 if not cluster else 50, cluster=cluster)
+            img_callback = ImageLogCallback(exmp_inputs, dataset, every_n_epochs=10 if not cluster else 50,
+                                            cluster=cluster)
             callbacks.append(img_callback)
         if correlation_dataset is not None:
-            corr_callback = PermutationCorrelationMetricsLogCallback(correlation_dataset, cluster=cluster, test_dataset=correlation_test_dataset)
+            corr_callback = PermutationCorrelationMetricsLogCallback(correlation_dataset, cluster=cluster,
+                                                                     test_dataset=correlation_test_dataset)
             callbacks.append(corr_callback)
         if action_data_loader is not None:
             actionvq_callback = InteractionVisualizationCallback(action_data_loader=action_data_loader)
