@@ -94,8 +94,10 @@ class VAE(pl.LightningModule):
 
         # Encoder-Decoder init
         if self.hparams.no_encoder_decoder:
+            print('case1')
             self.encoder, self.decoder = nn.Identity(), nn.Identity()
         elif self.hparams.linear_encoder_decoder:
+            print('case2')
             nn_hid = max(512, 2 * self.hparams.c_hid)
             self.encoder = nn.Sequential(
                 nn.Linear(self.hparams.c_in, nn_hid),
@@ -114,6 +116,7 @@ class VAE(pl.LightningModule):
             )
         else:
             if self.hparams.img_width == 32:
+                print('case3')
                 self.encoder = SimpleEncoder(c_in=self.hparams.c_in,
                                              c_hid=self.hparams.c_hid,
                                              num_latents=self.hparams.num_latents)
@@ -121,6 +124,7 @@ class VAE(pl.LightningModule):
                                              c_hid=self.hparams.c_hid,
                                              num_latents=self.hparams.num_latents)
             else:
+                print('case4')
                 self.encoder = Encoder(num_latents=self.hparams.num_latents,
                                        c_hid=self.hparams.c_hid,
                                        c_in=self.hparams.c_in,
@@ -141,6 +145,7 @@ class VAE(pl.LightningModule):
 
     def forward(self, x):
         # Full encoding and decoding of samples
+        print(f"VAE input - Type of x: {type(x)}, Shape of x: {x.shape}")
         z_mean, z_logstd = self.encoder(x)
         z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
         x_rec = self.decoder(z_sample)
