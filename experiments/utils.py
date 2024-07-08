@@ -185,8 +185,9 @@ def train_model(model_class, train_loader, val_loader,
                          max_epochs=max_epochs,
                          callbacks=callbacks,
                          check_val_every_n_epoch=check_val_every_n_epoch,
-                         num_sanity_val_steps=0,
                          gradient_clip_val=gradient_clip_val,
+                         enable_progress_bar=True,
+                         enable_model_summary=True,
                          **trainer_args)
     trainer.logger._default_hp_metric = None
     print(7)
