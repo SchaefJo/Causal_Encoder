@@ -4,11 +4,11 @@ Run file to train BISCUIT-VAE
 
 import sys
 
-from experiments.datasets import VoronoiDataset, iTHORDataset
 import torch.utils.data as data
 
 sys.path.append('../')
 from models.vae import VAE
+from experiments.datasets import VoronoiDataset, iTHORDataset
 from experiments.utils import train_model, load_datasets, get_default_parser, print_params
 
 
