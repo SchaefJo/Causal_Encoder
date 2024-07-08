@@ -257,9 +257,6 @@ class SimpleEncoder(nn.Module):
         )
 
     def forward(self, x):
-        if isinstance(x, list):
-            x = torch.stack(x, dim=0)
-        print(f"Encoder: Type of x: {type(x)}, Shape of x: {x.shape}")
         feats = self.net(x)
         return feats
 
@@ -306,7 +303,6 @@ class SimpleDecoder(nn.Module):
         )
 
     def forward(self, x):
-        print(f"Decoder input - Type of x: {type(x)}, Shape of x: {x.shape}")
         x = self.linear(x)
         x = x.reshape(x.shape[0], -1, 4, 4)
         x = self.net(x)
