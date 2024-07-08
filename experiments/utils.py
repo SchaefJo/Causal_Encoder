@@ -10,6 +10,7 @@ import torch.utils.data as data
 import pytorch_lightning as pl 
 from pytorch_lightning.callbacks import ModelCheckpoint
 from shutil import copyfile
+import logging
 
 import sys
 sys.path.append('../')
@@ -148,9 +149,24 @@ def train_model(model_class, train_loader, val_loader,
                 data_dir=None,
                 compile=False,
                 **kwargs):
+    # Test the train_loader
+    for batch in train_loader:
+        print(batch)
+        break
+
+    # Test the val_loader
+    for batch in val_loader:
+        print(batch)
+        break
+
+    for batch in test_loader:
+        print(batch)
+        break
+
     torch.set_float32_matmul_precision('medium')
     trainer_args = {}
     print(2)
+    logging.getLogger("pytorch_lightning").setLevel(logging.DEBUG)
     if root_dir is None or root_dir == '':
         root_dir = os.path.join('checkpoints/', model_class.__name__)
     if not (logger_name is None or logger_name == ''):
@@ -186,7 +202,7 @@ def train_model(model_class, train_loader, val_loader,
                          accelerator='gpu' if torch.cuda.is_available() else 'cpu', 
                          devices=1,
                          max_epochs=max_epochs,
-                         callbacks=callbacks,
+                         #callbacks=callbacks,
                          check_val_every_n_epoch=check_val_every_n_epoch,
                          gradient_clip_val=gradient_clip_val,
                          early_stop_callback=None,
@@ -220,6 +236,14 @@ def train_model(model_class, train_loader, val_loader,
         pl.seed_everything(seed)  # To be reproducable
         print(11)
         model = model_class(**kwargs)
+
+        sample_batch_train = next(iter(train_loader))
+        sample_batch_val = next(iter(val_loader))
+        output_train = model(sample_batch_train)
+        output_val = model(sample_batch_val)
+        print('forward test')
+        print(output_train)
+        print(output_val)
         if op_before_running is not None:
             print(12)
             model.to(get_device())
@@ -231,7 +255,11 @@ def train_model(model_class, train_loader, val_loader,
             else:
                 print('Warning: PyTorch version does not support compilation. Skipping...')
         print(14)
-        trainer.fit(model, train_loader, val_loader)
+        try:
+            trainer.fit(model, train_loader, val_loader)
+        except Exception as e:
+            print('14b')
+            print(e)
         print(15)
         model = model_class.load_from_checkpoint(
             trainer.checkpoint_callback.best_model_path)  # Load best checkpoint after training
