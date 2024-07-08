@@ -128,6 +128,50 @@ def print_params(logger_name, model_args):
         print(f'-> {key}: {model_args[key]}')
     print('=' * num_chars)
 
+
+def fit_trainer(model, train_loader, val_loader, epochs):
+    # Optimizer
+    optimizer, _ = model.configure_optimizers()
+    optimizer = optimizer[0]
+
+    # Loss Function
+    device = get_device()
+    # Move model to device
+    model.to(device)
+
+    # Training Loop
+    for epoch in range(epochs):
+        model.train()
+        train_loss = 0
+        for batch in train_loader:
+            inputs = batch.to(device)
+
+            optimizer.zero_grad()
+
+            loss = model.get_loss(inputs)
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item() * inputs.size(0)
+
+        train_loss /= len(train_loader.dataset)
+
+        # Validation Loop
+        model.eval()
+        val_loss = 0
+        with torch.no_grad():
+            for batch in val_loader:
+                inputs = batch.to(device)
+
+                loss = model.get_loss(inputs)
+                val_loss += loss.item() * inputs.size(0)
+
+        val_loss /= len(val_loader.dataset)
+
+        print(f'Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
+
+    print("Training complete.")
+
 def train_model(model_class, train_loader, val_loader, 
                 test_loader=None,
                 logger_name=None,
@@ -221,7 +265,8 @@ def train_model(model_class, train_loader, val_loader,
                 model = torch.compile(model)
             else:
                 print('Warning: PyTorch version does not support compilation. Skipping...')
-        trainer.fit(model, train_loader, val_loader)
+        #trainer.fit(model, train_loader, val_loader)
+        fit_trainer(model, train_loader, val_loader, max_epochs)
         model = model_class.load_from_checkpoint(
             trainer.checkpoint_callback.best_model_path)  # Load best checkpoint after training
     if test_loader is not None:
@@ -242,3 +287,4 @@ def train_model(model_class, train_loader, val_loader,
             log_file = os.path.join(trainer.logger.log_dir, f'test_results_{prefix}.json')
             with open(log_file, 'w') as f:
                 json.dump(test_result, f, indent=4)
+
