@@ -1,5 +1,6 @@
 import argparse
 import torch
+from sklearn.gaussian_process.kernels import RBF
 from tqdm import tqdm
 import torch.nn.functional as F
 from experiments.datasets import iTHORDataset, VoronoiDataset
@@ -8,17 +9,18 @@ import torch.utils.data as data
 from datetime import datetime
 import os
 from models.biscuit_nf import BISCUITNF
+from models.shared.causal_gp_sklearn import CausalGPSklearn
 from models.shared.causal_mlp import CausalMLP
+from sklearn.gaussian_process import GaussianProcessClassifier, GaussianProcessRegressor
 
 
-class RunnerCausalMLP:
-    def __init__(self, num_train_epochs=100, train_prop=0.5, log_interval=10, dataset='ithor',
+
+class RunnerCausalGP:
+    def __init__(self, causal_var_info, train_prop=0.5, dataset='ithor',
                  checkpoint_path='pretrained_models/causal_encoder/', disentangled=True):
         super().__init__()
         self.dataset = dataset
-        self.num_train_epochs = num_train_epochs
         self.train_prop = train_prop
-        self.log_interval = log_interval
         self.disentangled = disentangled
         current_time = datetime.now()
         self.date_time_str = current_time.strftime('%d.%m._%H:%M:%S')
@@ -28,48 +30,12 @@ class RunnerCausalMLP:
         self.cluster = False
         self.log_postfix = ''
 
-    def train_network(self, pl_module, train_dataset, name, causal_var_info):
-        device = pl_module.device
+        kernel = 1.0 * RBF(length_scale=1.0)
+        # kernel = 1.0 * Matern(length_scale=1.0, nu=1.5)
+        self.CGP = CausalGPSklearn(kernel=kernel, causal_var_info=causal_var_info)
 
-        # We use one, sufficiently large network that predicts for any input all causal variables
-        # To iterate over the different sets, we use a mask which is an extra input to the model
-        # This is more efficient than using N networks and showed same results with large hidden size
-
-        mlp = CausalMLP(hidden_dim=128,
-                        lr=4e-3,
-                        output=causal_var_info)
-        optimizer = mlp.configure_optimizers()
-        if isinstance(optimizer, (list, tuple)):
-            optimizer = optimizer[0]
-
-        train_loader = data.DataLoader(train_dataset, shuffle=True, drop_last=False, batch_size=512)
-        mlp.to(device)
-        mlp.train()
-        range_iter = range(self.num_train_epochs)
-        if not self.cluster:
-            range_iter = tqdm(range_iter, leave=False, desc=f'Training correlation encoder {self.log_postfix}')
-        for epoch_idx in range_iter:
-            avg_loss = 0.0
-            for inps, latents in train_loader:
-                inps = inps.to(device)
-                latents = latents.to(device)
-                #inps, latents = self._prepare_input(inps, target_assignment, latents)
-                loss = mlp._get_loss(inps, latents, causal_var_info)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                avg_loss += loss.item()
-            if epoch_idx % self.log_interval == 0:
-                avg_loss /= len(train_loader)
-                print(f'Epoch [{epoch_idx}/{self.num_train_epochs}], Loss: {avg_loss:.4f}')
-        model_path = os.path.join(self.checkpoint_path, f'model_{name}_{self.date_time_str}.pth')
-        torch.save(mlp.state_dict(), model_path)
-        print(f'Model checkpoint saved at {self.checkpoint_path}')
-        return mlp
 
     def test_model(self, pl_module, dataset, name):
-        # Encode whole dataset with pl_module
-        is_training = pl_module.training
         pl_module = pl_module.eval()
         loader = data.DataLoader(dataset, batch_size=256, drop_last=False, shuffle=False)
         causal_var_info = dataset.get_causal_var_info()
@@ -101,19 +67,13 @@ class RunnerCausalMLP:
         train_dataset, test_dataset = data.random_split(full_dataset,
                                                         lengths=[train_size, test_size],
                                                         generator=torch.Generator().manual_seed(42))
+        train_inps, train_labels = all_encs[train_dataset.indices], all_latents[train_dataset.indices]
+        self.CGP.train(train_inps, train_labels)
 
-        encoder = self.train_network(pl_module, train_dataset, name, causal_var_info)
-        encoder.eval()
-
-        # Record predictions of model on test and calculate distances
         test_inps, test_labels = all_encs[test_dataset.indices], all_latents[test_dataset.indices]
 
-        test_inps = test_inps.to(pl_module.device)
-        test_labels = test_labels.to(pl_module.device)
-
-        with torch.no_grad():
-            comb_loss = encoder._get_loss(test_inps, test_labels, dataset.get_causal_var_info())
-        print(f'Comb loss: {comb_loss.item()}')
+        comb_loss = self.CGP._get_loss(test_inps, test_labels)
+        print(f'Comb loss: {comb_loss}')
 
         return comb_loss
 
@@ -133,10 +93,10 @@ def main(args):
     model.freeze()
     _ = model.eval()
 
-    causal_encode_runner = RunnerCausalMLP(num_train_epochs=args.max_epochs, log_interval=args.log_interval,
-                                                      checkpoint_path=args.causal_encoder_output,
-                                                      train_prop=args.train_prop, dataset=args.dataset,
-                                                      disentangled=args.disentangled)
+    causal_encode_runner = RunnerCausalGP(causal_var_info=dataset.get_causal_var_info(),
+                                          checkpoint_path=args.causal_encoder_output,
+                                          train_prop=args.train_prop, dataset=args.dataset,
+                                          disentangled=args.disentangled)
 
     loss = causal_encode_runner.test_model(model, dataset, 'first_R2')
 

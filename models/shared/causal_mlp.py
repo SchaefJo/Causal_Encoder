@@ -78,3 +78,33 @@ class CausalMLP(nn.Module):
             combined_loss = mse_loss
 
         return combined_loss
+
+    # def _get_loss(self, inps, target):
+    #     values, probas, values_std = self.forward(inps)
+    #     total_mse = 0
+    #     total_log_loss = 0
+    #     num_categorical = 0
+    #     num_continuous = 0
+    #
+    #     for idx, val in enumerate(self.causal_var_info.values()):
+    #         if val.startswith('categ_'):
+    #             # Convert targets to long for compatibility with torch cross entropy
+    #             targets = torch.tensor(target[:, idx], dtype=torch.long)
+    #             preds = torch.tensor(probas[idx])
+    #
+    #             ce_loss = F.cross_entropy(preds, targets)
+    #             total_log_loss += ce_loss.item()
+    #             num_categorical += 1
+    #         elif val.startswith('continuous_'):
+    #             targets = torch.tensor(target[:, idx], dtype=torch.float)
+    #             preds = torch.tensor(values[idx], dtype=torch.float)
+    #
+    #             mse_loss = F.mse_loss(preds, targets)
+    #             total_mse += mse_loss.item()
+    #             num_continuous += 1
+    #
+    #     avg_mse = total_mse / num_continuous if num_continuous > 0 else 0
+    #     avg_log_loss = total_log_loss / num_categorical if num_categorical > 0 else 0
+    #
+    #     combined_loss = avg_mse + avg_log_loss
+    #     return combined_loss
