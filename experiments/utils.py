@@ -150,6 +150,7 @@ def train_model(model_class, train_loader, val_loader,
                 **kwargs):
     torch.set_float32_matmul_precision('medium')
     trainer_args = {}
+    print(2)
     if root_dir is None or root_dir == '':
         root_dir = os.path.join('checkpoints/', model_class.__name__)
     if not (logger_name is None or logger_name == ''):
@@ -160,12 +161,14 @@ def train_model(model_class, train_loader, val_loader,
         trainer_args['logger'] = logger
     if progress_bar_refresh_rate == 0:
         trainer_args['enable_progress_bar'] = False
-
+    print(3)
     if callback_kwargs is None:
         callback_kwargs = dict()
     callbacks = model_class.get_callbacks(exmp_inputs=next(iter(val_loader)), cluster=cluster, 
                                           **callback_kwargs)
+    print(4)
     if not debug:
+        print(5)
         callbacks.append(
                 ModelCheckpoint(save_weights_only=True, 
                                 mode="min", 
@@ -174,6 +177,7 @@ def train_model(model_class, train_loader, val_loader,
                                 every_n_epochs=check_val_every_n_epoch)
             )
     if debug:
+        print(6)
         torch.autograd.set_detect_anomaly(True) 
     trainer = pl.Trainer(default_root_dir=root_dir,
                          accelerator='gpu' if torch.cuda.is_available() else 'cpu', 
@@ -184,6 +188,7 @@ def train_model(model_class, train_loader, val_loader,
                          gradient_clip_val=gradient_clip_val,
                          **trainer_args)
     trainer.logger._default_hp_metric = None
+    print(7)
 
     if files_to_save is not None:
         log_dir = trainer.logger.log_dir
@@ -195,15 +200,17 @@ def train_model(model_class, train_loader, val_loader,
                 print(f'=> Copied {filename}')
             else:
                 print(f'=> File not found: {file}')
-
+    print(8)
     # Check whether pretrained model exists. If yes, load it and skip training
     pretrained_filename = os.path.join(
         'checkpoints/', model_class.__name__ + ".ckpt")
     if load_pretrained and os.path.isfile(pretrained_filename):
+        print(9)
         print("Found pretrained model at %s, loading..." % pretrained_filename)
         # Automatically loads the model with the saved hyperparameters
         model = model_class.load_from_checkpoint(pretrained_filename)
     else:
+        print(10)
         if load_pretrained:
             print("Warning: Could not load any pretrained models despite", load_pretrained)
         pl.seed_everything(seed)  # To be reproducable
@@ -219,8 +226,9 @@ def train_model(model_class, train_loader, val_loader,
         trainer.fit(model, train_loader, val_loader)
         model = model_class.load_from_checkpoint(
             trainer.checkpoint_callback.best_model_path)  # Load best checkpoint after training
-
+    print(11)
     if test_loader is not None:
+        print(12)
         model_paths = [(trainer.checkpoint_callback.best_model_path, "best")]
         if save_last_model:
             model_paths += [(trainer.checkpoint_callback.last_model_path, "last")]
