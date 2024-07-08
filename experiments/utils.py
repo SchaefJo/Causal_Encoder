@@ -149,19 +149,6 @@ def train_model(model_class, train_loader, val_loader,
                 data_dir=None,
                 compile=False,
                 **kwargs):
-    # Test the train_loader
-    for batch in train_loader:
-        print(batch)
-        break
-
-    # Test the val_loader
-    for batch in val_loader:
-        print(batch)
-        break
-
-    for batch in test_loader:
-        print(batch)
-        break
 
     torch.set_float32_matmul_precision('medium')
     trainer_args = {}
@@ -205,7 +192,6 @@ def train_model(model_class, train_loader, val_loader,
                          #callbacks=callbacks,
                          check_val_every_n_epoch=check_val_every_n_epoch,
                          gradient_clip_val=gradient_clip_val,
-                         early_stop_callback=None,
                          **trainer_args)
     trainer.logger._default_hp_metric = None
     print(7)
