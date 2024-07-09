@@ -100,7 +100,7 @@ class CausalGPSklearn():
 
         for idx, (causal, values_per_causal) in enumerate(values.items()):
             var_type = self.causal_var_info[causal]
-            test_metric = {'causal': causal, 'split': 'train'}
+            test_metric = {'causal': causal, 'split': 'test'}
             if var_type.startswith('categ_'):
                 cur_loss = log_loss(np.array(target[:, idx]), np.array(values_per_causal))
                 total_log_loss += cur_loss
