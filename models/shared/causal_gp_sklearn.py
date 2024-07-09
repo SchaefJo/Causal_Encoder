@@ -1,3 +1,5 @@
+import os.path
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,7 +7,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 from sklearn.gaussian_process import GaussianProcessClassifier, GaussianProcessRegressor
 from matplotlib import pyplot as plt
-from sklearn.metrics import log_loss, mean_squared_error
+from sklearn.metrics import log_loss, mean_squared_error, accuracy_score
+import joblib
+from datetime import datetime
+
 
 
 class CausalGPSklearn():
@@ -40,7 +45,27 @@ class CausalGPSklearn():
 
     def train(self, x, y):
         for index, gp in enumerate(self.gp_list):
+            start_time = datetime.now()
             gp.fit(x, y[:, index])
+            end_time = datetime.now()
+            print(f'{index} gp finished training (Duration: {end_time - start_time})')
+
+            if isinstance(gp, GaussianProcessClassifier):
+                predictions = gp.predict(x)
+                accuracy = accuracy_score(y[:, index], predictions)
+                print(f'{index} gp accuracy train: {accuracy}')
+            else:
+                predictions = gp.predict(x)
+                mse = mean_squared_error(y[:, index], predictions)
+                print(f'{index} gp MSE train: {mse}')
+
+    def save_gp_model(self, file_path):
+        for i, gp in enumerate(self.gp_list):
+            # TODO ordering might be an issue
+            model = list(self.causal_var_info[i])
+            joblib.dump(gp, os.path.join(file_path, model))
+            print(f'Model {model} saved to {file_path}')
+
 
     def _get_loss(self, inps, target):
         values, probas = self.forward(inps)

@@ -68,6 +68,7 @@ class RunnerCausalGP:
                                                         lengths=[train_size, test_size],
                                                         generator=torch.Generator().manual_seed(42))
         train_inps, train_labels = all_encs[train_dataset.indices], all_latents[train_dataset.indices]
+        print("Start training")
         self.CGP.train(train_inps, train_labels)
 
         test_inps, test_labels = all_encs[test_dataset.indices], all_latents[test_dataset.indices]
