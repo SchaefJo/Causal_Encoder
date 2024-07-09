@@ -26,13 +26,14 @@ class RunnerCausalGP:
         self.date_time_str = current_time.strftime('%d.%m._%H:%M:%S')
 
         self.checkpoint_path = checkpoint_path
+        result_path = os.path.join(checkpoint_path, 'results.json')
 
         self.cluster = False
         self.log_postfix = ''
 
         kernel = 1.0 * RBF(length_scale=1.0)
         # kernel = 1.0 * Matern(length_scale=1.0, nu=1.5)
-        self.CGP = CausalGPSklearn(kernel=kernel, causal_var_info=causal_var_info)
+        self.CGP = CausalGPSklearn(kernel=kernel, causal_var_info=causal_var_info, result_path=result_path)
 
 
     def test_model(self, pl_module, dataset, name):

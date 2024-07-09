@@ -10,61 +10,76 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import log_loss, mean_squared_error, accuracy_score
 import joblib
 from datetime import datetime
+import json
 
 
 
 class CausalGPSklearn():
-    def __init__(self, causal_var_info, kernel):
+    def __init__(self, causal_var_info, kernel, result_path):
         super(CausalGPSklearn, self).__init__()
         self.causal_var_info = causal_var_info
-        self.gp_list = self.get_gp_model_vec(causal_var_info, kernel)
+        self.gp_dict = self.get_gp_model_vec(causal_var_info, kernel)
+        self.result_path = result_path
+        self.train_metrics = []
+        self.test_metrics = []
 
     def get_gp_model_vec(self, var_info, kernel):
-        gp = []
+        gp_dict = {}
 
-        for idx, val in enumerate(var_info.values()):
+        for key, val in var_info.items():
             if val.startswith('categ_'):
-                gp.append(GaussianProcessClassifier(kernel=kernel))
+                gp_dict[key] = GaussianProcessClassifier(kernel=kernel)
             elif val.startswith('continuous_'):
-                gp.append(GaussianProcessRegressor(kernel=kernel))
+                gp_dict[key] = GaussianProcessRegressor(kernel=kernel)
 
-        return gp
+        return gp_dict
 
     def forward(self, x):
-        probas = []
-        values_std = []
-        values = []
+        probas = {}
+        values = {}
 
-        for gp in self.gp_list:
+        for causal, gp in self.gp_dict.items():
             if isinstance(gp, GaussianProcessClassifier):
-                probas.append(gp.predict_proba(x))
-            #values_std.append(gp.predict(x, return_std=True))
-            values.append(gp.predict(x))
+                probas[causal] = gp.predict_proba(x)
+            else:
+                probas[causal] = gp.predict(x, return_std=True)
+            values[causal] = gp.predict(x)
 
-        return values, probas#, values_std
+        return values, probas
 
     def train(self, x, y):
-        for index, gp in enumerate(self.gp_list):
+        for index, (causal, gp) in enumerate(self.gp_dict.items()):
             start_time = datetime.now()
             gp.fit(x, y[:, index])
             end_time = datetime.now()
-            print(f'{index} gp finished training (Duration: {end_time - start_time})')
-
+            print(f'{causal} gp finished training (Duration: {end_time - start_time})')
+            train_metric = {'causal': causal, 'split': 'train'}
             if isinstance(gp, GaussianProcessClassifier):
                 predictions = gp.predict(x)
+
+                logloss = log_loss(y[:, index], predictions)
+                print(f'{causal} gp log loss: {logloss}')
+                train_metric['log_loss'] = logloss
+
                 accuracy = accuracy_score(y[:, index], predictions)
-                print(f'{index} gp accuracy train: {accuracy}')
+                print(f'{causal} gp accuracy train: {accuracy}')
+                train_metric['accuracy'] = accuracy
             else:
                 predictions = gp.predict(x)
                 mse = mean_squared_error(y[:, index], predictions)
-                print(f'{index} gp MSE train: {mse}')
+                print(f'{causal} gp MSE train: {mse}')
+                train_metric['mse'] = mse
+            self.train_metrics.append(train_metric)
+        self._save_metrics_to_file(self.train_metrics, file_name=self.result_path)
+
+    def _save_metrics_to_file(self, metrics, file_name='performance_metrics.json'):
+        with open(file_name, 'w') as f:
+            json.dump(metrics, f, indent=4)
 
     def save_gp_model(self, file_path):
-        for i, gp in enumerate(self.gp_list):
-            # TODO ordering might be an issue
-            model = list(self.causal_var_info[i])
-            joblib.dump(gp, os.path.join(file_path, model))
-            print(f'Model {model} saved to {file_path}')
+        for key, gp in self.gp_dict.items():
+            joblib.dump(gp, os.path.join(file_path, key))
+            print(f'Model {key} saved to {file_path}')
 
 
     def _get_loss(self, inps, target):
@@ -74,17 +89,29 @@ class CausalGPSklearn():
         num_categorical = 0
         num_continuous = 0
 
-        for idx, val in enumerate(self.causal_var_info.values()):
-            if val.startswith('categ_'):
-                total_log_loss += log_loss(np.array(target[:, idx]), np.array(values[idx]))
+        for idx, (causal, values_per_causal) in enumerate(values.items()):
+            var_type = self.causal_var_info[causal]
+            test_metric = {'causal': causal, 'split': 'train'}
+            if var_type.startswith('categ_'):
+                cur_loss = log_loss(np.array(target[:, idx]), np.array(values_per_causal))
+                total_log_loss += cur_loss
                 num_categorical += 1
-            elif val.startswith('continuous_'):
-                total_mse += mean_squared_error(target[:, idx], values[idx])
-                num_continuous += 1
+                print(f'{causal} gp log loss: {cur_loss}')
+                test_metric['log_loss'] = cur_loss
 
+                cur_acc = accuracy_score(np.array(target[:, idx]), np.array(values_per_causal))
+                print(f'{causal} gp accuracy: {cur_acc}')
+                test_metric['accuracy'] = cur_acc
+            elif var_type.startswith('continuous_'):
+                cur_loss = mean_squared_error(target[:, idx], values_per_causal)
+                total_mse += cur_loss
+                num_continuous += 1
+                print(f'{causal} gp MSE train: {cur_loss}')
+                test_metric['mse'] = cur_loss
+            self.test_metrics.append(test_metric)
+        self._save_metrics_to_file(self.test_metrics, file_name=self.result_path)
         avg_mse = total_mse / num_continuous if num_continuous > 0 else 0
         avg_log_loss = total_log_loss / num_categorical if num_categorical > 0 else 0
-
         combined_loss = avg_mse + avg_log_loss
         return combined_loss
 
