@@ -1,11 +1,15 @@
+import json
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from sklearn.metrics import accuracy_score
 
 
 class CausalMLP(nn.Module):
-    def __init__(self, output, input_dim=40, hidden_dim=128, lr=4e-3, weight_decay=0.0):
+    def __init__(self, output, input_dim=40, hidden_dim=128, lr=4e-3, weight_decay=0.0, results_path='results.json'):
         super(CausalMLP, self).__init__()
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.layer2 = nn.Linear(hidden_dim, hidden_dim)
@@ -20,6 +24,8 @@ class CausalMLP(nn.Module):
 
         self.continuous_dim = continuous_dim
         self.categorical_dim = categorical_dim
+
+        self.results_path = results_path
 
     def process_output(self, output):
         continuous_dim = 0
@@ -48,21 +54,25 @@ class CausalMLP(nn.Module):
         # TODO: for now ignore what comes after the _ in values: categ_2 or continous_2.8
         categ_indices = []
         contin_indices = []
+        categ_causal = []
+        contin_causal = []
 
-        for idx, val in enumerate(var_info.values()):
+        for idx, (causal, val) in enumerate(var_info.items()):
             if val.startswith('categ_'):
                 categ_indices.append(idx)
+                categ_causal.append(causal)
             elif val.startswith('continuous_'):
                 contin_indices.append(idx)
+                contin_causal.append(causal)
 
         categorical_target = target[:, categ_indices]
         continuous_target = target[:, contin_indices]
 
-        return continuous_target, categorical_target
+        return continuous_target, categorical_target, contin_causal, categ_causal
 
 
     def _get_loss(self, inps, target, var_info):
-        continuous_target, categorical_target = self.separate_cat_contin(target, var_info)
+        continuous_target, categorical_target, _, _ = self.separate_cat_contin(target, var_info)
         continuous_pred, categorical_pred = self.forward(inps)
 
         mse_loss = F.mse_loss(continuous_pred, continuous_target)
@@ -78,6 +88,35 @@ class CausalMLP(nn.Module):
             combined_loss = mse_loss
 
         return combined_loss
+
+    # todo not batched
+    def compute_individual_losses(self, inps, target, var_info, split):
+        continuous_target, categorical_target, continuous_causal, categorical_causal = self.separate_cat_contin(target, var_info)
+        individual_losses = []
+        continuous_pred, categorical_pred = self.forward(inps)
+
+        for i, causal in enumerate(continuous_causal):
+            mse = F.mse_loss(continuous_pred[:, i], continuous_target[:, i])
+            individual_losses.append({'causal': causal, 'loss': mse.item(),
+                                      'split': split})
+
+        for idx, causal in range(categorical_causal):
+            ce = F.cross_entropy(categorical_pred[:, i], categorical_target[:, i])
+            acc = accuracy_score(categorical_pred[:, i], categorical_target[:, i])
+            individual_losses.append({'causal': causal, 'split': split, 'loss': ce.item(), 'accuracy': acc})
+
+        self._save_metrics_to_file(individual_losses, self.results_path)
+
+    def _save_metrics_to_file(self, metrics, file_name):
+        if os.path.exists(file_name):
+            with open(file_name, 'r') as f:
+                existing_metrics = json.load(f)
+            existing_metrics.extend(metrics)
+            with open(file_name, 'w') as f:
+                json.dump(existing_metrics, f, indent=4)
+        else:
+            with open(file_name, 'w') as f:
+                json.dump(metrics, f, indent=4)
 
     # def _get_loss(self, inps, target):
     #     values, probas, values_std = self.forward(inps)

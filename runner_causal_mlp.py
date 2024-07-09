@@ -24,6 +24,7 @@ class RunnerCausalMLP:
         self.date_time_str = current_time.strftime('%d.%m._%H:%M:%S')
 
         self.checkpoint_path = checkpoint_path
+        self.result_path = os.path.join(checkpoint_path, 'results.json')
 
         self.cluster = False
         self.log_postfix = ''
@@ -37,7 +38,8 @@ class RunnerCausalMLP:
 
         mlp = CausalMLP(hidden_dim=128,
                         lr=4e-3,
-                        output=causal_var_info)
+                        output=causal_var_info,
+                        results_path=self.result_path)
         optimizer = mlp.configure_optimizers()
         if isinstance(optimizer, (list, tuple)):
             optimizer = optimizer[0]
@@ -62,6 +64,7 @@ class RunnerCausalMLP:
             if epoch_idx % self.log_interval == 0:
                 avg_loss /= len(train_loader)
                 print(f'Epoch [{epoch_idx}/{self.num_train_epochs}], Loss: {avg_loss:.4f}')
+        mlp.compute_individual_losses(inps, target, var_info, split)
         model_path = os.path.join(self.checkpoint_path, f'model_{name}_{self.date_time_str}.pth')
         torch.save(mlp.state_dict(), model_path)
         print(f'Model checkpoint saved at {self.checkpoint_path}')

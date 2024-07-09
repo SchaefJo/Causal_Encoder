@@ -58,8 +58,8 @@ class CausalGPSklearn():
                 predictions = gp.predict(x)
 
                 logloss = log_loss(y[:, index], predictions)
-                print(f'{causal} gp log loss: {logloss}')
-                train_metric['log_loss'] = logloss
+                print(f'{causal} gp log loss train: {logloss}')
+                train_metric['loss'] = logloss
 
                 accuracy = accuracy_score(y[:, index], predictions)
                 print(f'{causal} gp accuracy train: {accuracy}')
@@ -68,13 +68,20 @@ class CausalGPSklearn():
                 predictions = gp.predict(x)
                 mse = mean_squared_error(y[:, index], predictions)
                 print(f'{causal} gp MSE train: {mse}')
-                train_metric['mse'] = mse
+                train_metric['loss'] = mse
             self.train_metrics.append(train_metric)
         self._save_metrics_to_file(self.train_metrics, file_name=self.result_path)
 
-    def _save_metrics_to_file(self, metrics, file_name='performance_metrics.json'):
-        with open(file_name, 'w') as f:
-            json.dump(metrics, f, indent=4)
+    def _save_metrics_to_file(self, metrics, file_name):
+        if os.path.exists(file_name):
+            with open(file_name, 'r') as f:
+                existing_metrics = json.load(f)
+            existing_metrics.extend(metrics)
+            with open(file_name, 'w') as f:
+                json.dump(existing_metrics, f, indent=4)
+        else:
+            with open(file_name, 'w') as f:
+                json.dump(metrics, f, indent=4)
 
     def save_gp_model(self, file_path):
         for key, gp in self.gp_dict.items():
@@ -96,18 +103,18 @@ class CausalGPSklearn():
                 cur_loss = log_loss(np.array(target[:, idx]), np.array(values_per_causal))
                 total_log_loss += cur_loss
                 num_categorical += 1
-                print(f'{causal} gp log loss: {cur_loss}')
-                test_metric['log_loss'] = cur_loss
+                print(f'{causal} gp log loss test: {cur_loss}')
+                test_metric['loss'] = cur_loss
 
                 cur_acc = accuracy_score(np.array(target[:, idx]), np.array(values_per_causal))
-                print(f'{causal} gp accuracy: {cur_acc}')
+                print(f'{causal} gp accuracy test: {cur_acc}')
                 test_metric['accuracy'] = cur_acc
             elif var_type.startswith('continuous_'):
                 cur_loss = mean_squared_error(target[:, idx], values_per_causal)
                 total_mse += cur_loss
                 num_continuous += 1
-                print(f'{causal} gp MSE train: {cur_loss}')
-                test_metric['mse'] = cur_loss
+                print(f'{causal} gp MSE train test: {cur_loss}')
+                test_metric['loss'] = cur_loss
             self.test_metrics.append(test_metric)
         self._save_metrics_to_file(self.test_metrics, file_name=self.result_path)
         avg_mse = total_mse / num_continuous if num_continuous > 0 else 0
