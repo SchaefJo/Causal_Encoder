@@ -98,6 +98,11 @@ class CausalMLP(nn.Module):
                 target, var_info)
             continuous_pred, categorical_pred = self.forward(inps)
 
+            print('categorical_pred')
+            print(np.unique(categorical_pred))
+            print('continuous pred')
+            print(np.unique(continuous_pred))
+
             for i, causal in enumerate(continuous_causal):
                 mse = F.mse_loss(continuous_pred[:, i], continuous_target[:, i])
                 individual_losses.append({'causal': causal, 'loss': mse.item(), 'split': split})
