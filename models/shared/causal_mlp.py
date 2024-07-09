@@ -103,7 +103,7 @@ class CausalMLP(nn.Module):
 
             for i, causal in enumerate(categorical_causal):
                 ce = F.cross_entropy(categorical_pred[:, i], categorical_target[:, i])
-                categorical_pred_labels = torch.argmax(categorical_pred[:, i], dim=1)
+                categorical_pred_labels = torch.argmax(categorical_pred[:, i], dim=0)
                 acc = accuracy_score(categorical_target[:, i].cpu(), categorical_pred_labels.cpu())
                 individual_losses.append({'causal': causal, 'split': split, 'loss': ce.item(), 'accuracy': acc})
 
