@@ -64,7 +64,7 @@ class RunnerCausalMLP:
             if epoch_idx % self.log_interval == 0:
                 avg_loss /= len(train_loader)
                 print(f'Epoch [{epoch_idx}/{self.num_train_epochs}], Loss: {avg_loss:.4f}')
-        mlp.compute_individual_losses(inps, target, var_info, split)
+        mlp.compute_individual_losses(train_loader, causal_var_info, "train")
         model_path = os.path.join(self.checkpoint_path, f'model_{name}_{self.date_time_str}.pth')
         torch.save(mlp.state_dict(), model_path)
         print(f'Model checkpoint saved at {self.checkpoint_path}')
@@ -118,6 +118,8 @@ class RunnerCausalMLP:
             comb_loss = encoder._get_loss(test_inps, test_labels, dataset.get_causal_var_info())
         print(f'Comb loss: {comb_loss.item()}')
 
+        test_loader = data.DataLoader(test_dataset, shuffle=False, drop_last=False, batch_size=512)
+        encoder.compute_individual_losses(test_loader, causal_var_info, "test")
         return comb_loss
 
 
