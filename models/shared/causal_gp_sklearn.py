@@ -74,9 +74,11 @@ class CausalGPSklearn():
 
     def _save_metrics_to_file(self, metrics, file_name):
         if os.path.exists(file_name):
+            print("file exists")
             with open(file_name, 'r') as f:
                 existing_metrics = json.load(f)
             existing_metrics.extend(metrics)
+            print(existing_metrics)
             with open(file_name, 'w') as f:
                 json.dump(existing_metrics, f, indent=4)
         else:
@@ -116,6 +118,9 @@ class CausalGPSklearn():
                 print(f'{causal} gp MSE train test: {cur_loss}')
                 test_metric['loss'] = cur_loss
             self.test_metrics.append(test_metric)
+        print('debug')
+        print(test_metric)
+        print(self.result_path)
         self._save_metrics_to_file(self.test_metrics, file_name=self.result_path)
         avg_mse = total_mse / num_continuous if num_continuous > 0 else 0
         avg_log_loss = total_log_loss / num_categorical if num_categorical > 0 else 0
