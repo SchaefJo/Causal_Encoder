@@ -1,6 +1,7 @@
 import json
 import os
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -103,7 +104,12 @@ class CausalMLP(nn.Module):
 
             for i, causal in enumerate(categorical_causal):
                 ce = F.cross_entropy(categorical_pred[:, i], categorical_target[:, i])
-                acc = accuracy_score(categorical_target[:, i].detach().numpy(), categorical_pred[:, i].detach().numpy())
+                cur_target = categorical_target[:, i].detach().numpy()
+                cur_pred = categorical_pred[:, i].detach().numpy()
+                print("unique target, preds")
+                print(np.unique(cur_target))
+                print(np.unique(cur_pred))
+                acc = accuracy_score(cur_target, cur_pred)
                 individual_losses.append({'causal': causal, 'split': split, 'loss': ce.item(), 'accuracy': acc})
 
         self._save_metrics_to_file(individual_losses, self.results_path)
