@@ -10,12 +10,13 @@ from sklearn.metrics import accuracy_score
 
 
 class CausalMLP(nn.Module):
-    def __init__(self, output, input_dim=40, hidden_dim=128, lr=4e-3, weight_decay=0.0, results_path='results.json'):
+    def __init__(self, causal_var_info, input_dim=40, hidden_dim=128, lr=4e-3, weight_decay=0.0, results_path='results.json'):
         super(CausalMLP, self).__init__()
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.layer2 = nn.Linear(hidden_dim, hidden_dim)
 
-        categorical_dim, continuous_dim = self.process_output(output)
+        self.causal_var_info = causal_var_info
+        categorical_dim, continuous_dim = self.process_output(causal_var_info)
 
         self.continuous_layer = nn.Linear(hidden_dim, continuous_dim)
         self.categorical_layer = nn.Linear(hidden_dim, 2 * categorical_dim)
@@ -74,8 +75,8 @@ class CausalMLP(nn.Module):
         return continuous_target, categorical_target, contin_causal, categ_causal
 
 
-    def _get_loss(self, inps, target, var_info):
-        continuous_target, categorical_target, _, _ = self.separate_cat_contin(target, var_info)
+    def _get_loss(self, inps, target):
+        continuous_target, categorical_target, _, _ = self.separate_cat_contin(target, self.causal_var_info)
         continuous_pred, categorical_pred = self.forward(inps)
 
         mse_loss = F.mse_loss(continuous_pred, continuous_target)
