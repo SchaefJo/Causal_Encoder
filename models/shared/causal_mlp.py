@@ -18,7 +18,7 @@ class CausalMLP(nn.Module):
         categorical_dim, continuous_dim = self.process_output(output)
 
         self.continuous_layer = nn.Linear(hidden_dim, continuous_dim)
-        self.categorical_layer = nn.Linear(hidden_dim, categorical_dim)
+        self.categorical_layer = nn.Linear(hidden_dim, 2 * categorical_dim)
 
         self.lr = lr
         self.weight_decay = weight_decay
@@ -44,6 +44,8 @@ class CausalMLP(nn.Module):
 
         continuous_output = self.continuous_layer(x)
         categorical_output = self.categorical_layer(x)
+
+        categorical_output = categorical_output.view(-1, self.categorical_dim, 2)
 
         return continuous_output, categorical_output
 
@@ -109,8 +111,9 @@ class CausalMLP(nn.Module):
 
             for i, causal in enumerate(categorical_causal):
                 ce = F.cross_entropy(categorical_pred[:, i], categorical_target[:, i])
+
                 cur_target = categorical_target[:, i].detach().numpy()
-                cur_pred = categorical_pred[:, i].detach().numpy()
+                cur_pred = torch.argmax(categorical_pred[:, i], dim=1).detach().numpy()
                 print("unique target, preds")
                 print(np.unique(cur_target))
                 print(np.unique(cur_pred))
