@@ -79,6 +79,10 @@ class CausalMLP(nn.Module):
         continuous_pred, categorical_pred = self.forward(inps)
 
         mse_loss = F.mse_loss(continuous_pred, continuous_target)
+
+        batch_size = categorical_target.size(0)
+        categorical_pred = categorical_pred.view(batch_size * self.categorical_dim, 2)
+        categorical_target = categorical_target.view(batch_size * self.categorical_dim).long()
         ce_loss = F.cross_entropy(categorical_pred, categorical_target)
 
         num_targets = self.continuous_dim + self.categorical_dim
@@ -100,24 +104,19 @@ class CausalMLP(nn.Module):
                 target, var_info)
             continuous_pred, categorical_pred = self.forward(inps)
 
-            print('categorical_pred')
-            print(np.unique(categorical_pred.detach().numpy()))
-            print('continuous pred')
-            print(np.unique(continuous_pred.detach().numpy()))
-
             for i, causal in enumerate(continuous_causal):
                 mse = F.mse_loss(continuous_pred[:, i], continuous_target[:, i])
                 individual_losses.append({'causal': causal, 'loss': mse.item(), 'split': split})
 
             for i, causal in enumerate(categorical_causal):
-                ce = F.cross_entropy(categorical_pred[:, i], categorical_target[:, i])
+                categorical_pred_i = categorical_pred[:, i, :]
+                categorical_target_i = categorical_target[:, i].long()
 
-                cur_target = categorical_target[:, i].detach().numpy()
-                cur_pred = torch.argmax(categorical_pred[:, i], dim=1).detach().numpy()
-                print("unique target, preds")
-                print(np.unique(cur_target))
-                print(np.unique(cur_pred))
-                acc = accuracy_score(cur_target, cur_pred)
+                ce = F.cross_entropy(categorical_pred_i, categorical_target_i)
+
+                categorical_target_i_np = categorical_target_i.detach().numpy()
+                categorical_pred_i_np = torch.argmax(categorical_pred_i, dim=1).detach().numpy()
+                acc = accuracy_score(categorical_target_i_np, categorical_pred_i_np)
                 individual_losses.append({'causal': causal, 'split': split, 'loss': ce.item(), 'accuracy': acc})
 
         self._save_metrics_to_file(individual_losses, self.results_path)
@@ -132,33 +131,3 @@ class CausalMLP(nn.Module):
         else:
             with open(file_name, 'w') as f:
                 json.dump(metrics, f, indent=4)
-
-    # def _get_loss(self, inps, target):
-    #     values, probas, values_std = self.forward(inps)
-    #     total_mse = 0
-    #     total_log_loss = 0
-    #     num_categorical = 0
-    #     num_continuous = 0
-    #
-    #     for idx, val in enumerate(self.causal_var_info.values()):
-    #         if val.startswith('categ_'):
-    #             # Convert targets to long for compatibility with torch cross entropy
-    #             targets = torch.tensor(target[:, idx], dtype=torch.long)
-    #             preds = torch.tensor(probas[idx])
-    #
-    #             ce_loss = F.cross_entropy(preds, targets)
-    #             total_log_loss += ce_loss.item()
-    #             num_categorical += 1
-    #         elif val.startswith('continuous_'):
-    #             targets = torch.tensor(target[:, idx], dtype=torch.float)
-    #             preds = torch.tensor(values[idx], dtype=torch.float)
-    #
-    #             mse_loss = F.mse_loss(preds, targets)
-    #             total_mse += mse_loss.item()
-    #             num_continuous += 1
-    #
-    #     avg_mse = total_mse / num_continuous if num_continuous > 0 else 0
-    #     avg_log_loss = total_log_loss / num_categorical if num_categorical > 0 else 0
-    #
-    #     combined_loss = avg_mse + avg_log_loss
-    #     return combined_loss
