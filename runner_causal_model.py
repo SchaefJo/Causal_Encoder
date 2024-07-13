@@ -171,8 +171,8 @@ def main(args):
     if args.dataset == 'ithor':
         dataset = iTHORDataset(args.data_dir, split=args.split, single_image=True, return_targets=False,
                                return_latents=True)
-        if args.test_data_dir is not None:
-            test_dataset = iTHORDataset(args.test_data_dir, split=args.split, single_image=True, return_targets=False,
+        if args.test_data_split is not None:
+            test_dataset = iTHORDataset(args.data_dir, split=args.test_data_split, single_image=True, return_targets=False,
                                return_latents=True)
         else:
             test_dataset = None
@@ -180,8 +180,8 @@ def main(args):
     else:
         dataset = VoronoiDataset(args.data_dir, split=args.split, single_image=True, return_targets=False,
                                  return_latents=True)
-        if args.test_data_dir is not None:
-            test_dataset = VoronoiDataset(args.test_data_dir, split=args.split, single_image=True, return_targets=False,
+        if args.test_data_split is not None:
+            test_dataset = VoronoiDataset(args.data_dir, split=args.test_data_split, single_image=True, return_targets=False,
                                  return_latents=True)
         else:
             test_dataset = None
@@ -203,7 +203,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default="../data/ithor/val_small/")
-    parser.add_argument('--test_data_dir', type=str)
+    parser.add_argument('--test_data_split', type=str)
     parser.add_argument('--split', type=str, default='val')
     parser.add_argument('--dataset', choices=['voronoi', 'ithor'], default='ithor')
     parser.add_argument('--biscuit_checkpoint', type=str,
