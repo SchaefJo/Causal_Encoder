@@ -21,6 +21,7 @@ class RunnerCausalModel:
     def __init__(self, causal_var_info, model, num_train_epochs=100, train_prop=0.5, log_interval=10, dataset='ithor',
                  checkpoint_path='pretrained_models/causal_encoder/', disentangled=True):
         super().__init__()
+        self.active_learning_pool = None
         self.dataset = dataset
         self.num_train_epochs = num_train_epochs
         self.train_prop = train_prop
@@ -133,11 +134,22 @@ class RunnerCausalModel:
                                                             lengths=[train_size, test_size])
 
                 test_inps, test_labels = all_encs[test_dataset.indices], all_latents[test_dataset.indices]
+
+                self.active_learning_pool = None
+
+                train_inps, train_labels = all_encs[train_dataset.indices], all_latents[train_dataset.indices]
             else:
                 print('The given test dataset is used.')
                 samples_train = RandomSampler(full_dataset, replacement=True, num_samples=train_size)
                 indices_train = list(samples_train)
                 train_dataset = data.TensorDataset(all_encs[indices_train], all_latents[indices_train])
+                train_inps, train_labels = all_encs[indices_train], all_latents[indices_train]
+
+                #get non training examples from the dataset
+                all_indices = set(range(len(all_encs)))
+                train_indices_set = set(indices_train)
+                remaining_indices = list(all_indices - train_indices_set)
+                self.active_learning_pool = data.TensorDataset(all_encs[remaining_indices], all_latents[remaining_indices])
 
                 test_inps, test_labels = self.preprocess_data(dataset_test, pl_module)
                 test_dataset = data.TensorDataset(test_inps, test_labels)
@@ -146,7 +158,6 @@ class RunnerCausalModel:
                 self.train_mlp(pl_module, train_dataset, causal_var_info)
                 self.model.eval()
             elif self.model_type == 'gp':
-                train_inps, train_labels = all_encs[train_dataset.indices], all_latents[train_dataset.indices]
                 print("Start training")
                 self.model.train(train_inps, train_labels)
 
@@ -162,6 +173,9 @@ class RunnerCausalModel:
             if self.model_type == 'mlp':
                 test_loader = data.DataLoader(test_dataset, shuffle=False, drop_last=False, batch_size=512)
                 self.model.compute_individual_losses(test_loader, causal_var_info, "test")
+
+    def active_learning(self):
+
 
 
 
@@ -197,6 +211,9 @@ def main(args):
 
     causal_encode_runner.test_model(model_biscuit, dataset, test_dataset, args.iterations)
 
+    if args.active_learning:
+        causal_encode_runner.active_learning()
+
 
 
 
@@ -217,6 +234,7 @@ if __name__ == '__main__':
                         help='If set, disables disentanglement. Disentanglement is normally on.')
     parser.add_argument('--model', choices=['mlp', 'encoder', 'gp'], default='gp')
     parser.add_argument('--iterations', type=int, default=1, help='Number of iterations for model fitting')
+    parser.add_argument('--active_learning', action='store_true', default=False)
     parser.set_defaults(disentangled=True)
     args = parser.parse_args()
 
