@@ -12,6 +12,7 @@ import os
 from models.biscuit_nf import BISCUITNF
 from models.shared.causal_gp_sklearn import CausalGPSklearn
 from models.shared.causal_mlp import CausalMLP
+from modAL.models import ActiveLearner
 
 seed = 42
 torch.manual_seed(seed)
@@ -175,7 +176,14 @@ class RunnerCausalModel:
                 self.model.compute_individual_losses(test_loader, causal_var_info, "test")
 
     def active_learning(self):
-        pass
+        learner = None#ActiveLearner(
+        #    estimator=RandomForestClassifier(),
+        #    X_training=X_training, y_training=y_training
+        #)
+
+        query_idx, _ = learner.query(self.active_learning_pool.tensors[0])
+
+        learner.teach(self.active_learning_pool.tensors[0][query_idx], self.active_learning_pool.tensors[1][query_idx])
 
 
 
