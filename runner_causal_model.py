@@ -175,7 +175,7 @@ class RunnerCausalModel:
                 self.model.compute_individual_losses(test_loader, causal_var_info, "test")
 
     def active_learning(self):
-
+        pass
 
 
 
