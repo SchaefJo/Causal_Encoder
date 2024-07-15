@@ -193,7 +193,7 @@ class RunnerCausalModel:
                     max_causal = ''
                     for causal, uncertainties in uncertainty.items():
                         cur_idx = np.argmax(uncertainties)
-                        cur_val = np.max(uncertainty)
+                        cur_val = np.max(uncertainties)
 
                         if cur_val > max_uncertainty:
                             max_uncertainty_idx = cur_idx
