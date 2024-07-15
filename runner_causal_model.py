@@ -272,7 +272,7 @@ def main(args):
     causal_encode_runner.test_model(model_biscuit, dataset, test_dataset, args.iterations)
 
     if args.active_learning:
-        causal_encode_runner.active_learning(args.active_learn_iterations, args.active_learn_strategy, model_biscuit)
+        causal_encode_runner.active_learning(args.active_learning_iterations, args.active_learning_strategy, model_biscuit)
 
 
 def create_versioned_subdir(base_dir):
