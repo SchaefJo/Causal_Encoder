@@ -330,7 +330,7 @@ if __name__ == '__main__':
     args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
                                               f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}/')
     args.causal_encoder_output = create_versioned_subdir(args.causal_encoder_output)
-
+    print('args:')
     print(args)
 
     main(args)
