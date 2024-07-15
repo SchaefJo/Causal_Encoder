@@ -310,8 +310,8 @@ if __name__ == '__main__':
     parser.add_argument('--model', choices=['mlp', 'encoder', 'gp'], default='gp')
     parser.add_argument('--iterations', type=int, default=1, help='Number of iterations for model fitting')
     parser.add_argument('--active_learning', action='store_true', default=False)
-    parser.add_argument('--active_learn_iterations', type=int, default=10)
-    parser.add_argument('--active_learn_strategy', default='most_uncertain', choices=['most_uncertain',
+    parser.add_argument('--active_learning_iterations', type=int, default=10)
+    parser.add_argument('--active_learning_strategy', default='most_uncertain', choices=['most_uncertain',
                         'uncertain_per_causal', 'average_uncertainty', 'random'])
     parser.set_defaults(disentangled=True)
     args = parser.parse_args()
