@@ -42,7 +42,7 @@ class CausalGPSklearn():
             if isinstance(gp, GaussianProcessClassifier):
                 probas[causal] = gp.predict_proba(x)
             else:
-                probas[causal] = gp.predict(x, return_std=True)
+                _, probas[causal] = gp.predict(x, return_std=True)
             values[causal] = gp.predict(x)
 
         return values, probas

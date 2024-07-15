@@ -1,4 +1,7 @@
 import argparse
+import random
+
+import numpy as np
 import torch
 from sklearn.gaussian_process.kernels import RBF
 from torch.utils.data import RandomSampler
@@ -33,6 +36,7 @@ class RunnerCausalModel:
 
         self.checkpoint_path = checkpoint_path
         self.result_path = os.path.join(checkpoint_path, 'results.json')
+        self.causal_var_info = causal_var_info
 
         # TODO do this?
         self.cluster = False
@@ -144,6 +148,7 @@ class RunnerCausalModel:
                 samples_train = RandomSampler(full_dataset, replacement=True, num_samples=train_size)
                 indices_train = list(samples_train)
                 train_dataset = data.TensorDataset(all_encs[indices_train], all_latents[indices_train])
+                self.train_dataset = train_dataset
                 train_inps, train_labels = all_encs[indices_train], all_latents[indices_train]
 
                 #get non training examples from the dataset
@@ -154,6 +159,7 @@ class RunnerCausalModel:
 
                 test_inps, test_labels = self.preprocess_data(dataset_test, pl_module)
                 test_dataset = data.TensorDataset(test_inps, test_labels)
+                self.test_dataset = test_dataset
 
             if self.model_type == 'mlp':
                 self.train_mlp(pl_module, train_dataset, causal_var_info)
@@ -175,16 +181,59 @@ class RunnerCausalModel:
                 test_loader = data.DataLoader(test_dataset, shuffle=False, drop_last=False, batch_size=512)
                 self.model.compute_individual_losses(test_loader, causal_var_info, "test")
 
-    def active_learning(self):
-        learner = None#ActiveLearner(
-        #    estimator=RandomForestClassifier(),
-        #    X_training=X_training, y_training=y_training
-        #)
+    def active_learning(self, al_iterations, al_strategy, pl_module):
+        if self.model_type == 'gp':
+            for _ in range(al_iterations):
+                _, uncertainty = self.model(self.active_learning_pool)
+                if al_strategy == 'most_uncertain':
+                    max_uncertainty = -1
+                    max_uncertainty_idx = -1
+                    for causal, uncertainties in uncertainty.items():
+                        cur_idx = np.argmax(uncertainties)
+                        cur_val = np.max(uncertainty)
 
-        query_idx, _ = learner.query(self.active_learning_pool.tensors[0])
+                        if cur_val > max_uncertainty:
+                            max_uncertainty_idx = cur_idx
+                            max_uncertainty = cur_val
 
-        learner.teach(self.active_learning_pool.tensors[0][query_idx], self.active_learning_pool.tensors[1][query_idx])
+                elif al_strategy == 'uncertain_per_causal':
+                    max_uncertainty_idx = []
+                    for causal, uncertainties in uncertainty.items():
+                        cur_idx = np.argmax(uncertainties)
+                        max_uncertainty_idx.append(cur_idx)
+                    max_uncertainty_idx = np.array(max_uncertainty_idx)
 
+                elif al_strategy == 'random':
+                    max_uncertainty_idx = random.randint(0, len(uncertainty) - 1)
+                elif al_strategy == 'average_uncertainty':
+                    raise NotImplementedError('not yet implemented')
+                    #TODO here look at which data point would help the most classifiers at once
+
+                else:
+                    raise ValueError('This active learning strategy does not exist!')
+
+                # TODO maybe not only picking one but picking the top 3 is better
+
+                new_data, new_labels = self.active_learning_pool.tensors[0][max_uncertainty_idx], \
+                    self.active_learning_pool.tensors[1][max_uncertainty_idx]
+
+                train_data, train_labels = self.train_dataset.tensors
+
+                new_train_data = torch.cat((train_data, new_data), dim=0)
+                new_train_labels = torch.cat((train_labels, new_labels), dim=0)
+
+                # TODO this is for MLP
+                # new_train_dataset = data.TensorDataset(new_train_data, new_train_labels)
+
+                print("Start training")
+                self.model.train(new_train_data, new_train_labels)
+
+                test_inps, test_labels = self.test_dataset.tensors
+                comb_loss = self.model._get_loss(test_inps, test_labels)
+                print(comb_loss)
+
+        else:
+            raise NotImplementedError('Not implemented uncertainty for mlp')
 
 
 def main(args):
@@ -220,7 +269,7 @@ def main(args):
     causal_encode_runner.test_model(model_biscuit, dataset, test_dataset, args.iterations)
 
     if args.active_learning:
-        causal_encode_runner.active_learning()
+        causal_encode_runner.active_learning(args.active_learn_iterations, args.active_learn_strategy, model_biscuit)
 
 
 
@@ -243,6 +292,9 @@ if __name__ == '__main__':
     parser.add_argument('--model', choices=['mlp', 'encoder', 'gp'], default='gp')
     parser.add_argument('--iterations', type=int, default=1, help='Number of iterations for model fitting')
     parser.add_argument('--active_learning', action='store_true', default=False)
+    parser.add_argument('--active_learn_iterations', type=int, default=10)
+    parser.add_argument('--active_learn_strategy', default='most_uncertain', choices=['most_uncertain',
+                        'uncertain_per_causal', 'average_uncertainty', 'random'])
     parser.set_defaults(disentangled=True)
     args = parser.parse_args()
 
