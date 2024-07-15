@@ -185,15 +185,20 @@ class RunnerCausalModel:
     def active_learning(self, al_iterations, al_strategy, pl_module):
         print("Active Learning")
         if self.model_type == 'gp':
-            for _ in range(al_iterations):
+            for i in range(al_iterations):
+                print(f'Active Learning Iteration: {i}')
                 _, uncertainty = self.model.forward(self.active_learning_pool.tensors[0])
                 if al_strategy == 'most_uncertain':
                     max_uncertainty = -1
                     max_uncertainty_idx = -1
                     max_causal = ''
                     for causal, uncertainties in uncertainty.items():
+                        print(f'Causal {causal}, uncertainty shape: {uncertainties.shape}')
                         cur_idx = np.argmax(uncertainties)
                         cur_val = np.max(uncertainties)
+
+                        print(cur_idx)
+                        print(cur_val)
 
                         if cur_val > max_uncertainty:
                             max_uncertainty_idx = cur_idx
@@ -223,15 +228,14 @@ class RunnerCausalModel:
                     self.active_learning_pool.tensors[1][max_uncertainty_idx]
 
                 train_data, train_labels = self.train_dataset.tensors
-                print("debugging al")
-                print(train_data.shape)
-                print(new_data.shape)
-                print(train_data)
-                print(new_data)
 
-                new_train_data = torch.cat((train_data, new_data), dim=0)
-                new_train_labels = torch.cat((train_labels, new_labels), dim=0)
-
+                new_train_data = torch.cat((train_data, new_data.unsqueeze(0)), dim=0)
+                try:
+                    new_train_labels = torch.cat((train_labels, new_labels), dim=0)
+                    print('try')
+                except:
+                    new_train_labels = torch.cat((train_labels, new_labels.unsqueeze(0)), dim=0)
+                    print('except')
                 # TODO this is for MLP
                 # new_train_dataset = data.TensorDataset(new_train_data, new_train_labels)
 
@@ -326,5 +330,7 @@ if __name__ == '__main__':
     args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
                                               f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}/')
     args.causal_encoder_output = create_versioned_subdir(args.causal_encoder_output)
+
+    print(args)
 
     main(args)
