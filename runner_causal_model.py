@@ -275,6 +275,21 @@ def main(args):
         causal_encode_runner.active_learning(args.active_learn_iterations, args.active_learn_strategy, model_biscuit)
 
 
+def create_versioned_subdir(base_dir):
+    os.makedirs(base_dir, exist_ok=True)
+
+    subdirs = [d for d in os.listdir(base_dir) if
+               os.path.isdir(os.path.join(base_dir, d)) and d.startswith("version_")]
+
+    version_numbers = [int(d.split("_")[1]) for d in subdirs if d.split("_")[1].isdigit()]
+    next_version = max(version_numbers, default=-1) + 1
+
+    new_version_dir = os.path.join(base_dir, f"version_{next_version}")
+    os.makedirs(new_version_dir)
+
+    return new_version_dir
+
+
 
 
 if __name__ == '__main__':
@@ -303,6 +318,6 @@ if __name__ == '__main__':
 
     args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
                                               f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}/')
-    os.makedirs(os.path.dirname(args.causal_encoder_output), exist_ok=True)
+    args.causal_encoder_output = create_versioned_subdir(args.causal_encoder_output)
 
     main(args)
