@@ -47,30 +47,32 @@ class CausalGPSklearn():
 
         return values, probas
 
-    def train(self, x, y):
+    def train(self, x, y, verbose=True, save=True):
         for index, (causal, gp) in enumerate(self.gp_dict.items()):
             start_time = datetime.now()
             gp.fit(x, y[:, index])
             end_time = datetime.now()
             print(f'{causal} gp finished training (Duration: {end_time - start_time})')
             train_metric = {'causal': causal, 'split': 'train'}
-            if isinstance(gp, GaussianProcessClassifier):
-                predictions = gp.predict(x)
+            if verbose:
+                if isinstance(gp, GaussianProcessClassifier):
+                    predictions = gp.predict(x)
 
-                logloss = log_loss(y[:, index], predictions)
-                print(f'{causal} gp log loss train: {logloss}')
-                train_metric['loss'] = logloss
+                    logloss = log_loss(y[:, index], predictions)
+                    print(f'{causal} gp log loss train: {logloss}')
+                    train_metric['loss'] = logloss
 
-                accuracy = accuracy_score(y[:, index], predictions)
-                print(f'{causal} gp accuracy train: {accuracy}')
-                train_metric['accuracy'] = accuracy
-            else:
-                predictions = gp.predict(x)
-                mse = mean_squared_error(y[:, index], predictions)
-                print(f'{causal} gp MSE train: {mse}')
-                train_metric['loss'] = mse
-            self.train_metrics.append(train_metric)
-        self._save_metrics_to_file(self.train_metrics, file_name=self.result_path)
+                    accuracy = accuracy_score(y[:, index], predictions)
+                    print(f'{causal} gp accuracy train: {accuracy}')
+                    train_metric['accuracy'] = accuracy
+                else:
+                    predictions = gp.predict(x)
+                    mse = mean_squared_error(y[:, index], predictions)
+                    print(f'{causal} gp MSE train: {mse}')
+                    train_metric['loss'] = mse
+                self.train_metrics.append(train_metric)
+        if save:
+            self._save_metrics_to_file(self.train_metrics, file_name=self.result_path)
 
     def _save_metrics_to_file(self, metrics, file_name):
         if os.path.exists(file_name):
@@ -89,7 +91,7 @@ class CausalGPSklearn():
             print(f'Model {key} saved to {file_path}')
 
 
-    def _get_loss(self, inps, target):
+    def _get_loss(self, inps, target, save=True):
         values, probas = self.forward(inps)
         total_mse = 0
         total_log_loss = 0
@@ -116,7 +118,8 @@ class CausalGPSklearn():
                 #print(f'{causal} gp MSE train test: {cur_loss}')
                 test_metric['loss'] = cur_loss
             self.test_metrics.append(test_metric)
-        self._save_metrics_to_file(self.test_metrics, file_name=self.result_path)
+        if save:
+            self._save_metrics_to_file(self.test_metrics, file_name=self.result_path)
         avg_mse = total_mse / num_continuous if num_continuous > 0 else 0
         avg_log_loss = total_log_loss / num_categorical if num_categorical > 0 else 0
         combined_loss = avg_mse + avg_log_loss

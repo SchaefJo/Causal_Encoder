@@ -182,6 +182,7 @@ class RunnerCausalModel:
                 self.model.compute_individual_losses(test_loader, causal_var_info, "test")
 
     def active_learning(self, al_iterations, al_strategy, pl_module):
+        print("Active Learning")
         if self.model_type == 'gp':
             for _ in range(al_iterations):
                 _, uncertainty = self.model(self.active_learning_pool)
@@ -229,10 +230,10 @@ class RunnerCausalModel:
                 # new_train_dataset = data.TensorDataset(new_train_data, new_train_labels)
 
                 print("Start training")
-                self.model.train(new_train_data, new_train_labels)
+                self.model.train(new_train_data, new_train_labels, verbose=False, save=False)
 
                 test_inps, test_labels = self.test_dataset.tensors
-                comb_loss = self.model._get_loss(test_inps, test_labels)
+                comb_loss = self.model._get_loss(test_inps, test_labels, save=False)
                 print(comb_loss)
 
         else:
