@@ -185,7 +185,7 @@ class RunnerCausalModel:
         print("Active Learning")
         if self.model_type == 'gp':
             for _ in range(al_iterations):
-                _, uncertainty = self.model(self.active_learning_pool)
+                _, uncertainty = self.model.forward(self.active_learning_pool)
                 if al_strategy == 'most_uncertain':
                     max_uncertainty = -1
                     max_uncertainty_idx = -1
