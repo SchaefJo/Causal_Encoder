@@ -132,7 +132,8 @@ class RunnerCausalModel:
 
         test_size = all_encs.shape[0] - train_size
 
-        for _ in range(iterations):
+        for i in range(iterations):
+            print(f"Iteration {i}")
             if dataset_test is None:
                 print('No test dataset given, validation is split in half.')
                 train_dataset, test_dataset = data.random_split(full_dataset,
@@ -166,7 +167,7 @@ class RunnerCausalModel:
                 self.model.eval()
             elif self.model_type == 'gp':
                 print("Start training")
-                self.model.train(train_inps, train_labels)
+                self.model.train(train_inps, train_labels, verbose=False)
 
             # Record predictions of model on test and calculate distances
             test_inps = test_inps.to(pl_module.device)
