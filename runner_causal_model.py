@@ -223,6 +223,11 @@ class RunnerCausalModel:
                     self.active_learning_pool.tensors[1][max_uncertainty_idx]
 
                 train_data, train_labels = self.train_dataset.tensors
+                print("debugging al")
+                print(train_data.shape)
+                print(new_data.shape)
+                print(train_data)
+                print(new_data)
 
                 new_train_data = torch.cat((train_data, new_data), dim=0)
                 new_train_labels = torch.cat((train_labels, new_labels), dim=0)
