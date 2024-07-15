@@ -188,6 +188,7 @@ class RunnerCausalModel:
                 if al_strategy == 'most_uncertain':
                     max_uncertainty = -1
                     max_uncertainty_idx = -1
+                    max_causal = ''
                     for causal, uncertainties in uncertainty.items():
                         cur_idx = np.argmax(uncertainties)
                         cur_val = np.max(uncertainty)
@@ -195,6 +196,8 @@ class RunnerCausalModel:
                         if cur_val > max_uncertainty:
                             max_uncertainty_idx = cur_idx
                             max_uncertainty = cur_val
+                            max_causal = causal
+                    print(f'Most uncertain Causal: {max_causal} with uncertainty: {max_uncertainty}')
 
                 elif al_strategy == 'uncertain_per_causal':
                     max_uncertainty_idx = []
@@ -204,7 +207,7 @@ class RunnerCausalModel:
                     max_uncertainty_idx = np.array(max_uncertainty_idx)
 
                 elif al_strategy == 'random':
-                    max_uncertainty_idx = random.randint(0, len(uncertainty) - 1)
+                    max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
                 elif al_strategy == 'average_uncertainty':
                     raise NotImplementedError('not yet implemented')
                     #TODO here look at which data point would help the most classifiers at once
