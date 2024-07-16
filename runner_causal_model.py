@@ -229,6 +229,12 @@ class RunnerCausalModel:
 
                 train_data, train_labels = self.train_dataset.tensors
 
+                print('Debug al')
+                print(train_data.shape)
+                print(new_data.shape)
+                print(train_labels.shape)
+                print(new_labels.shape)
+
                 new_train_data = torch.cat((train_data, new_data.unsqueeze(0)), dim=0)
                 try:
                     new_train_labels = torch.cat((train_labels, new_labels), dim=0)
