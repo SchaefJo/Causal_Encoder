@@ -216,7 +216,11 @@ class RunnerCausalModel:
                     max_uncertainty_idx = np.unique(np.array(max_uncertainty_idx, dtype=int))
 
                 elif al_strategy == 'random':
-                    max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
+                    #max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
+
+                    num_picks = 17
+                    max_index = len(uncertainty.items()[0])
+                    max_uncertainty_idx = random.sample(range(max_index), num_picks)
                 elif al_strategy == 'average_uncertainty':
                     raise NotImplementedError('not yet implemented')
                     #TODO here look at which data point would help the most classifiers at once
@@ -264,6 +268,8 @@ class RunnerCausalModel:
                 print(f'Old uncertainty: {max_uncertainty_vals}')
                 _, uncertainty = self.model.forward(new_data)
                 print(f'New uncertainty: {uncertainty}')
+
+                # TODO remove new trained data from uncertainty calc data
 
         else:
             raise NotImplementedError('Not implemented uncertainty for mlp')
