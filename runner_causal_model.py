@@ -219,7 +219,12 @@ class RunnerCausalModel:
                     #max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
 
                     num_picks = 17
-                    max_index = len(uncertainty.items()[0])
+                    #max_index = len(uncertainty.items()[0])
+                    #max_uncertainty_idx = random.sample(range(max_index), num_picks)
+
+                    uncertainty_values = list(uncertainty.items())[0][1]
+                    max_index = len(uncertainty_values)
+
                     max_uncertainty_idx = random.sample(range(max_index), num_picks)
                 elif al_strategy == 'average_uncertainty':
                     raise NotImplementedError('not yet implemented')
