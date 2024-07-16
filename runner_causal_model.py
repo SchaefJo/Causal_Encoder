@@ -235,7 +235,9 @@ class RunnerCausalModel:
 
                     max_uncertainty_idx = random.sample(range(max_index), num_picks)
                 elif al_strategy == 'random':
-                    max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
+                    uncertainty_values = list(uncertainty.items())[0][1]
+                    max_index = len(uncertainty_values)
+                    max_uncertainty_idx = random.randint(0, max_index - 1)
                 elif al_strategy == 'average_uncertainty':
                     raise NotImplementedError('not yet implemented')
                     #TODO here look at which data point would help the most classifiers at once
