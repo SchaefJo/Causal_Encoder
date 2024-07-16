@@ -182,6 +182,9 @@ class RunnerCausalModel:
                 test_loader = data.DataLoader(test_dataset, shuffle=False, drop_last=False, batch_size=512)
                 self.model.compute_individual_losses(test_loader, causal_var_info, "test")
 
+
+
+
     def active_learning(self, al_iterations, al_strategy, pl_module):
         print("Active Learning")
         if self.model_type == 'gp':

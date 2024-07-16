@@ -34,13 +34,19 @@ class CausalGPSklearn():
 
         return gp_dict
 
+    def calculate_entropy(self, probas):
+        epsilon = 1e-10
+        probas = np.clip(probas, epsilon, 1 - epsilon)
+        entropy = -np.sum(probas * np.log(probas), axis=1)
+        return entropy
+
     def forward(self, x):
         probas = {}
         values = {}
 
         for causal, gp in self.gp_dict.items():
             if isinstance(gp, GaussianProcessClassifier):
-                probas[causal] = gp.predict_proba(x)
+                probas[causal] = self.calculate_entropy(gp.predict_proba(x))
             else:
                 _, probas[causal] = gp.predict(x, return_std=True)
             values[causal] = gp.predict(x)
