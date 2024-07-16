@@ -196,7 +196,8 @@ class RunnerCausalModel:
                         print(f'Causal {causal}, uncertainty shape: {uncertainties.shape}')
                         cur_idx = np.argmax(uncertainties)
                         cur_val = np.max(uncertainties)
-
+                        print(causal)
+                        print(uncertainties.shape)
                         print(cur_idx)
                         print(cur_val)
 
@@ -209,7 +210,11 @@ class RunnerCausalModel:
                 elif al_strategy == 'uncertain_per_causal':
                     max_uncertainty_idx = []
                     for causal, uncertainties in uncertainty.items():
+                        print(causal)
+                        print(uncertainties.shape)
+
                         cur_idx = np.argmax(uncertainties)
+                        print(cur_idx)
                         max_uncertainty_idx.append(cur_idx)
                     max_uncertainty_idx = np.array(max_uncertainty_idx)
 
@@ -223,17 +228,12 @@ class RunnerCausalModel:
                     raise ValueError('This active learning strategy does not exist!')
 
                 # TODO maybe not only picking one but picking the top 3 is better
+                print(max_uncertainty_idx)
 
                 new_data, new_labels = self.active_learning_pool.tensors[0][max_uncertainty_idx], \
                     self.active_learning_pool.tensors[1][max_uncertainty_idx]
 
                 train_data, train_labels = self.train_dataset.tensors
-
-                print('Debug al')
-                print(train_data.shape)
-                print(new_data.shape)
-                print(train_labels.shape)
-                print(new_labels.shape)
 
                 if len(new_data.shape) == 1:
                     new_data = new_data.unsqueeze(0)
@@ -243,6 +243,8 @@ class RunnerCausalModel:
                 new_train_data = torch.cat((train_data, new_data), dim=0)
                 new_train_labels = torch.cat((train_labels, new_labels), dim=0)
 
+                self.train_dataset = data.TensorDataset(new_train_data, new_train_labels)
+
                 # TODO this is for MLP
                 # new_train_dataset = data.TensorDataset(new_train_data, new_train_labels)
 
@@ -250,6 +252,7 @@ class RunnerCausalModel:
                 self.model.train(new_train_data, new_train_labels, verbose=False, save=False)
 
                 test_inps, test_labels = self.test_dataset.tensors
+                # TODO save this per al iteration, look at performance of uncertain examples, still uncertain?
                 comb_loss = self.model._get_loss(test_inps, test_labels, save=False)
                 print(comb_loss)
 
