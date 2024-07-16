@@ -206,13 +206,13 @@ class RunnerCausalModel:
                     print(f'Most uncertain Causal: {max_causal} with uncertainty: {max_uncertainty}')
 
                 elif al_strategy == 'uncertain_per_causal':
-                    max_uncertainty_idx = set()
+                    max_uncertainty_idx = []
                     max_uncertainty_vals = []
                     for causal, uncertainties in uncertainty.items():
                         cur_idx = np.argmax(uncertainties)
                         max_uncertainty_vals.append(np.max(uncertainties))
-                        max_uncertainty_idx.add(cur_idx)
-                    max_uncertainty_idx = np.array(max_uncertainty_idx)
+                        max_uncertainty_idx.append(cur_idx)
+                    max_uncertainty_idx = np.unique(np.array(max_uncertainty_idx, dtype=int))
 
                 elif al_strategy == 'random':
                     max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
