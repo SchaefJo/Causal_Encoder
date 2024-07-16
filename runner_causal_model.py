@@ -196,13 +196,8 @@ class RunnerCausalModel:
                     max_uncertainty_idx = -1
                     max_causal = ''
                     for causal, uncertainties in uncertainty.items():
-                        print(f'Causal {causal}, uncertainty shape: {uncertainties.shape}')
                         cur_idx = np.argmax(uncertainties)
                         cur_val = np.max(uncertainties)
-                        print(causal)
-                        print(uncertainties.shape)
-                        print(cur_idx)
-                        print(cur_val)
 
                         if cur_val > max_uncertainty:
                             max_uncertainty_idx = cur_idx
@@ -211,14 +206,12 @@ class RunnerCausalModel:
                     print(f'Most uncertain Causal: {max_causal} with uncertainty: {max_uncertainty}')
 
                 elif al_strategy == 'uncertain_per_causal':
-                    max_uncertainty_idx = []
+                    max_uncertainty_idx = set()
+                    max_uncertainty_vals = []
                     for causal, uncertainties in uncertainty.items():
-                        print(causal)
-                        print(uncertainties.shape)
-
                         cur_idx = np.argmax(uncertainties)
-                        print(cur_idx)
-                        max_uncertainty_idx.append(cur_idx)
+                        max_uncertainty_vals.append(np.max(uncertainties))
+                        max_uncertainty_idx.add(cur_idx)
                     max_uncertainty_idx = np.array(max_uncertainty_idx)
 
                 elif al_strategy == 'random':
@@ -231,7 +224,6 @@ class RunnerCausalModel:
                     raise ValueError('This active learning strategy does not exist!')
 
                 # TODO maybe not only picking one but picking the top 3 is better
-                print(max_uncertainty_idx)
 
                 new_data, new_labels = self.active_learning_pool.tensors[0][max_uncertainty_idx], \
                     self.active_learning_pool.tensors[1][max_uncertainty_idx]
@@ -257,7 +249,11 @@ class RunnerCausalModel:
                 test_inps, test_labels = self.test_dataset.tensors
                 # TODO save this per al iteration, look at performance of uncertain examples, still uncertain?
                 comb_loss = self.model._get_loss(test_inps, test_labels, save=False)
-                print(comb_loss)
+                print(f'Comb loss testing: {comb_loss}')
+
+                print(f'Old uncertainty: {max_uncertainty_vals}')
+                _, uncertainty = self.model.forward(new_data)
+                print(f'New uncertainty: {uncertainty}')
 
         else:
             raise NotImplementedError('Not implemented uncertainty for mlp')
