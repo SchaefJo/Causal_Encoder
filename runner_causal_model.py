@@ -238,12 +238,13 @@ class RunnerCausalModel:
                 new_train_data = torch.cat((train_data, new_data), dim=0)
                 new_train_labels = torch.cat((train_labels, new_labels), dim=0)
 
+                print(f'New dataset shape: {new_train_data.shape}')
+
                 self.train_dataset = data.TensorDataset(new_train_data, new_train_labels)
 
                 # TODO this is for MLP
                 # new_train_dataset = data.TensorDataset(new_train_data, new_train_labels)
 
-                print("Start training")
                 self.model.train(new_train_data, new_train_labels, verbose=False, save=False)
 
                 test_inps, test_labels = self.test_dataset.tensors
