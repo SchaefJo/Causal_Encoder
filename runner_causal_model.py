@@ -193,6 +193,7 @@ class RunnerCausalModel:
                 print(f'Active Learning Iteration: {i}')
                 _, uncertainty = self.model.forward(self.active_learning_pool.tensors[0])
                 if al_strategy == 'most_uncertain':
+                    #TODO does not work
                     max_uncertainty = -1
                     max_uncertainty_idx = -1
                     max_causal = ''
@@ -205,7 +206,14 @@ class RunnerCausalModel:
                             max_uncertainty = cur_val
                             max_causal = causal
                     print(f'Most uncertain Causal: {max_causal} with uncertainty: {max_uncertainty}')
-
+                elif al_strategy == 'one_most_uncertain':
+                    max_uncertainty_idx = []
+                    max_uncertainty_vals = []
+                    for causal, uncertainties in uncertainty.items():
+                        cur_idx = np.argmax(uncertainties)
+                        max_uncertainty_vals.append(np.max(uncertainties))
+                        max_uncertainty_idx.append(cur_idx)
+                    max_uncertainty_idx = random.choice(max_uncertainty_idx)
                 elif al_strategy == 'uncertain_per_causal':
                     max_uncertainty_idx = []
                     max_uncertainty_vals = []
@@ -215,7 +223,7 @@ class RunnerCausalModel:
                         max_uncertainty_idx.append(cur_idx)
                     max_uncertainty_idx = np.unique(np.array(max_uncertainty_idx, dtype=int))
 
-                elif al_strategy == 'random':
+                elif al_strategy == 'random_per_causal':
                     #max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
 
                     num_picks = 17
@@ -226,6 +234,8 @@ class RunnerCausalModel:
                     max_index = len(uncertainty_values)
 
                     max_uncertainty_idx = random.sample(range(max_index), num_picks)
+                elif al_strategy == 'random':
+                    max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
                 elif al_strategy == 'average_uncertainty':
                     raise NotImplementedError('not yet implemented')
                     #TODO here look at which data point would help the most classifiers at once
@@ -353,7 +363,7 @@ if __name__ == '__main__':
     parser.add_argument('--active_learning', action='store_true', default=False)
     parser.add_argument('--active_learning_iterations', type=int, default=10)
     parser.add_argument('--active_learning_strategy', default='most_uncertain', choices=['most_uncertain',
-                        'uncertain_per_causal', 'average_uncertainty', 'random'])
+                        'uncertain_per_causal', 'average_uncertainty', 'random', 'one_most_uncertain', 'random_per_causal'])
     parser.set_defaults(disentangled=True)
     args = parser.parse_args()
 
