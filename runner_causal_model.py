@@ -221,7 +221,7 @@ class RunnerCausalModel:
                     num_picks = 17
                     #max_index = len(uncertainty.items()[0])
                     #max_uncertainty_idx = random.sample(range(max_index), num_picks)
-
+                    max_uncertainty_vals = None
                     uncertainty_values = list(uncertainty.items())[0][1]
                     max_index = len(uncertainty_values)
 
@@ -270,9 +270,9 @@ class RunnerCausalModel:
                 comb_loss = self.model._get_loss(test_inps, test_labels, save=False)
                 print(f'Comb loss testing: {comb_loss}')
 
-                print(f'Old uncertainty: {max_uncertainty_vals}')
-                _, uncertainty = self.model.forward(new_data)
-                print(f'New uncertainty: {uncertainty}')
+                #print(f'Old uncertainty: {max_uncertainty_vals}')
+                #_, uncertainty = self.model.forward(new_data)
+                #print(f'New uncertainty: {uncertainty}')
 
                 # TODO remove new trained data from uncertainty calc data
 
