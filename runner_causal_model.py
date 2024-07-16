@@ -2,6 +2,7 @@ import argparse
 import random
 
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.gaussian_process.kernels import RBF
 from torch.utils.data import RandomSampler
@@ -227,6 +228,14 @@ class RunnerCausalModel:
 
                 new_data, new_labels = self.active_learning_pool.tensors[0][max_uncertainty_idx], \
                     self.active_learning_pool.tensors[1][max_uncertainty_idx]
+
+                new_data_array = new_data.numpy() if hasattr(new_data, 'numpy') else new_data
+                new_labels_array = new_labels.numpy() if hasattr(new_labels, 'numpy') else new_labels
+
+                data_df = pd.DataFrame(new_data_array)
+                labels_df = pd.DataFrame(new_labels_array)
+                merged_df = pd.concat([data_df, labels_df], axis=1)
+                merged_df.to_csv(os.path.join(self.checkpoint_path, f'active_learning_data_iter_{i}.csv'))
 
                 train_data, train_labels = self.train_dataset.tensors
 
