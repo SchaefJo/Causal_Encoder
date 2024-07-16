@@ -235,13 +235,14 @@ class RunnerCausalModel:
                 print(train_labels.shape)
                 print(new_labels.shape)
 
-                new_train_data = torch.cat((train_data, new_data.unsqueeze(0)), dim=0)
-                try:
-                    new_train_labels = torch.cat((train_labels, new_labels), dim=0)
-                    print('try')
-                except:
-                    new_train_labels = torch.cat((train_labels, new_labels.unsqueeze(0)), dim=0)
-                    print('except')
+                if len(new_data.shape) == 1:
+                    new_data = new_data.unsqueeze(0)
+                if len(new_labels.shape) == 1:
+                    new_labels = new_labels.unsqueeze(0)
+
+                new_train_data = torch.cat((train_data, new_data), dim=0)
+                new_train_labels = torch.cat((train_labels, new_labels), dim=0)
+
                 # TODO this is for MLP
                 # new_train_dataset = data.TensorDataset(new_train_data, new_train_labels)
 
