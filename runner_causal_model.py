@@ -15,8 +15,10 @@ from datetime import datetime
 import os
 from models.biscuit_nf import BISCUITNF
 from models.shared.causal_gp_sklearn import CausalGPSklearn
+from models.shared.causal_model_sklearn import CausalUncertaintySklearn
 from models.shared.causal_mlp import CausalMLP
-from modAL.models import ActiveLearner
+from sklearn.ensemble import RandomForestClassifier
+
 
 seed = 42
 torch.manual_seed(seed)
@@ -47,12 +49,16 @@ class RunnerCausalModel:
         if model == 'gp':
             kernel = 1.0 * RBF(length_scale=1.0)
             # kernel = 1.0 * Matern(length_scale=1.0, nu=1.5)
-            self.model = CausalGPSklearn(kernel=kernel, causal_var_info=causal_var_info, result_path=self.result_path)
+            #self.model = CausalGPSklearn(kernel=kernel, causal_var_info=causal_var_info, result_path=self.result_path)
+            self.model = CausalUncertaintySklearn(model_name=model, causal_var_info=causal_var_info,
+                                                  result_path=self.result_path, kernel=kernel)
         elif model == 'mlp':
             self.model = CausalMLP(hidden_dim=128,
                             lr=4e-3,
                             causal_var_info=causal_var_info,
                             results_path=self.result_path)
+        elif model == 'rf':
+            self.model = CausalUncertaintySklearn(model_name=model, causal_var_info=causal_var_info, result_path=self.result_path)
 
     def train_mlp(self, pl_module, train_dataset, causal_var_info):
         device = pl_module.device
@@ -149,6 +155,7 @@ class RunnerCausalModel:
                 print('The given test dataset is used.')
                 samples_train = RandomSampler(full_dataset, replacement=True, num_samples=train_size)
                 indices_train = list(samples_train)
+                self.train_index = indices_train
                 train_dataset = data.TensorDataset(all_encs[indices_train], all_latents[indices_train])
                 self.train_dataset = train_dataset
                 train_inps, train_labels = all_encs[indices_train], all_latents[indices_train]
@@ -184,10 +191,27 @@ class RunnerCausalModel:
                 self.model.compute_individual_losses(test_loader, causal_var_info, "test")
 
 
+    def save_data(self, new_data, new_labels, path, max_uncertainty_idx=None):
+        new_data_array = new_data.numpy() if hasattr(new_data, 'numpy') else new_data
+        new_labels_array = new_labels.numpy() if hasattr(new_labels, 'numpy') else new_labels
+
+        data_df = pd.DataFrame(new_data_array)
+        labels_df = pd.DataFrame(new_labels_array)
+        merged_df = pd.concat([data_df, labels_df], axis=1)
+        if max_uncertainty_idx is not None:
+            if isinstance(max_uncertainty_idx, (int, list, np.ndarray, pd.Index)):
+                merged_df.index = pd.Index(max_uncertainty_idx)
+            else:
+                merged_df.index = pd.Index([max_uncertainty_idx])
+        merged_df.to_csv(path)
 
 
     def active_learning(self, al_iterations, al_strategy, pl_module):
+        # TODO compare MLP with gp
         print("Active Learning")
+        al_path = os.path.join(self.checkpoint_path, f'active_learning_train_data.csv')
+        train_data, train_labels = self.train_dataset.tensors
+        self.save_data(self, train_data, train_labels, al_path, self.train_index)
         if self.model_type == 'gp':
             for i in range(al_iterations):
                 print(f'Active Learning Iteration: {i}')
@@ -250,13 +274,8 @@ class RunnerCausalModel:
                 new_data, new_labels = self.active_learning_pool.tensors[0][max_uncertainty_idx], \
                     self.active_learning_pool.tensors[1][max_uncertainty_idx]
 
-                new_data_array = new_data.numpy() if hasattr(new_data, 'numpy') else new_data
-                new_labels_array = new_labels.numpy() if hasattr(new_labels, 'numpy') else new_labels
-
-                data_df = pd.DataFrame(new_data_array)
-                labels_df = pd.DataFrame(new_labels_array)
-                merged_df = pd.concat([data_df, labels_df], axis=1)
-                merged_df.to_csv(os.path.join(self.checkpoint_path, f'active_learning_data_iter_{i}.csv'))
+                al_path = os.path.join(self.checkpoint_path, f'active_learning_data_iter_{i}.csv')
+                self.save_data(self, new_data, new_labels, al_path, max_uncertainty_idx)
 
                 train_data, train_labels = self.train_dataset.tensors
 
@@ -279,7 +298,7 @@ class RunnerCausalModel:
 
                 test_inps, test_labels = self.test_dataset.tensors
                 # TODO save this per al iteration, look at performance of uncertain examples, still uncertain?
-                comb_loss = self.model._get_loss(test_inps, test_labels, save=False)
+                comb_loss = self.model._get_loss(test_inps, test_labels, save=True, al_iter=i)
                 print(f'Comb loss testing: {comb_loss}')
 
                 #print(f'Old uncertainty: {max_uncertainty_vals}')
