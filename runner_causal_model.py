@@ -211,7 +211,7 @@ class RunnerCausalModel:
         print("Active Learning")
         al_path = os.path.join(self.checkpoint_path, f'active_learning_train_data.csv')
         train_data, train_labels = self.train_dataset.tensors
-        self.save_data(self, train_data, train_labels, al_path, self.train_index)
+        self.save_data(train_data, train_labels, al_path, self.train_index)
         if self.model_type == 'gp':
             for i in range(al_iterations):
                 print(f'Active Learning Iteration: {i}')
