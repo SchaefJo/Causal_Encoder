@@ -388,8 +388,12 @@ if __name__ == '__main__':
     parser.set_defaults(disentangled=True)
     args = parser.parse_args()
 
-    args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
-                                              f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}/')
+    if args.active_learning:
+        args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
+                   f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}_al_{args.active_learning_strategy}/')
+    else:
+        args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
+                                                  f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}/')
     args.causal_encoder_output = create_versioned_subdir(args.causal_encoder_output)
     print('args:')
     print(args)
