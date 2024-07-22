@@ -173,7 +173,7 @@ class RunnerCausalModel:
             if self.model_type == 'mlp':
                 self.train_mlp(pl_module, train_dataset, causal_var_info)
                 self.model.eval()
-            elif self.model_type == 'gp':
+            elif self.model_type == 'gp' or self.model_type == 'rf':
                 print("Start training")
                 self.model.train(train_inps, train_labels, verbose=False)
 
