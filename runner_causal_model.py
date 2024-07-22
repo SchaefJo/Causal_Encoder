@@ -379,7 +379,7 @@ if __name__ == '__main__':
                         default='.')
     parser.add_argument('--entangled', dest='disentangled', action='store_false',
                         help='If set, disables disentanglement. Disentanglement is normally on.')
-    parser.add_argument('--model', choices=['mlp', 'encoder', 'gp'], default='gp')
+    parser.add_argument('--model', choices=['mlp', 'encoder', 'gp', 'rf'], default='gp')
     parser.add_argument('--iterations', type=int, default=1, help='Number of iterations for model fitting')
     parser.add_argument('--active_learning', action='store_true', default=False)
     parser.add_argument('--active_learning_iterations', type=int, default=10)

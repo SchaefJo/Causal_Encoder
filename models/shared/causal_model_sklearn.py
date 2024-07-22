@@ -19,11 +19,12 @@ class CausalUncertaintySklearn():
     def __init__(self, model_name, causal_var_info, result_path, kernel=None):
         super(CausalUncertaintySklearn, self).__init__()
         self.causal_var_info = causal_var_info
+        self.model_name = model_name
         self.gp_dict = self.get_gp_model_vec(causal_var_info, kernel)
         self.result_path = result_path
         self.train_metrics = []
         self.test_metrics = []
-        self.model_name = model_name
+
 
     def get_gp_model_vec(self, var_info, kernel):
         gp_dict = {}
