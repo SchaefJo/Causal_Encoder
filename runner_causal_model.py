@@ -212,7 +212,7 @@ class RunnerCausalModel:
         al_path = os.path.join(self.checkpoint_path, f'active_learning_train_data.csv')
         train_data, train_labels = self.train_dataset.tensors
         self.save_data(train_data, train_labels, al_path, self.train_index)
-        if self.model_type == 'gp':
+        if self.model_type == 'gp' or self.model_type == 'rf':
             for i in range(al_iterations):
                 print(f'Active Learning Iteration: {i}')
                 _, uncertainty = self.model.forward(self.active_learning_pool.tensors[0])
@@ -275,7 +275,7 @@ class RunnerCausalModel:
                     self.active_learning_pool.tensors[1][max_uncertainty_idx]
 
                 al_path = os.path.join(self.checkpoint_path, f'active_learning_data_iter_{i}.csv')
-                self.save_data(self, new_data, new_labels, al_path, max_uncertainty_idx)
+                self.save_data(new_data, new_labels, al_path, max_uncertainty_idx)
 
                 train_data, train_labels = self.train_dataset.tensors
 
