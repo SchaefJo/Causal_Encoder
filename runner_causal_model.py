@@ -199,7 +199,7 @@ class RunnerCausalModel:
         labels_df = pd.DataFrame(new_labels_array)
         merged_df = pd.concat([data_df, labels_df], axis=1)
         if max_uncertainty_idx is not None:
-            if isinstance(max_uncertainty_idx, (int, list, np.ndarray, pd.Index)):
+            if isinstance(max_uncertainty_idx, (list, np.ndarray, pd.Index)):
                 merged_df.index = pd.Index(max_uncertainty_idx)
             else:
                 merged_df.index = pd.Index([max_uncertainty_idx])
