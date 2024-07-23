@@ -1,9 +1,11 @@
 import argparse
 import random
+from collections import Counter
 
 import numpy as np
 import pandas as pd
 import torch
+from matplotlib import pyplot as plt
 from modAL import ActiveLearner
 from modAL.density import information_density
 from modAL.uncertainty import uncertainty_sampling, entropy_sampling
@@ -324,12 +326,12 @@ class RunnerCausalModel:
             base_model = None
 
         # TODO pick only some labels
-
         learner = ActiveLearner(
             estimator=base_model,
             X_training=train_data,
             y_training=train_labels
         )
+
 
         density = information_density(new_data)
 
@@ -363,6 +365,8 @@ class RunnerCausalModel:
         elif al_strategy == 'entropy_density':
             learner.query_strategy = density_weighted_entropy_sampling
 
+        oracle_values = []
+        oracle_labels = []
         for i in range(al_iterations):
             print(f'al_debugging_iteration: {i}')
             query_idx, query_instance = learner.query(new_data)
@@ -389,6 +393,25 @@ class RunnerCausalModel:
             print(f"{data_type} Test Score: {score_test}")
             print(f"{data_type} Val Score: {score_val}")
 
+            if data_type == 'Oracle':
+                oracle_values.append(float(query_data))
+                oracle_labels.append(int(query_label))
+
+        #oracle_labels = [label[0] for label in oracle_labels]
+        oracle_counts = Counter(oracle_labels)
+        print(f"Query labels: {oracle_counts}")
+
+        plt.figure(figsize=(10, 6))
+        plt.hist(oracle_values, bins=20, edgecolor='black')
+        plt.title('Distribution of Query Data of the oracles')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+        plt.grid(True)
+
+        # Saving the plot
+        plt.savefig(os.path.join(self.checkpoint_path, 'query_data_distribution.png'))
+
+
     def active_learning_debug(self, al_iterations, al_strategy, pl_module):
         train_data, train_labels = self.train_dataset.tensors
         new_data, new_labels = self.active_learning_pool.tensors
@@ -412,15 +435,15 @@ class RunnerCausalModel:
         new_labels = send_tensor_cpu(new_labels)
         test_data = send_tensor_cpu(test_data)
         test_labels = send_tensor_cpu(test_labels)
-
-        self.active_learning_run(self, al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
+        self.active_learning_run(al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
                                  test_data, test_labels)
+
         train_data = train_data[:, ground_truth_dim]
         new_data = new_data[:, ground_truth_dim]
         test_data = test_data[:, ground_truth_dim]
-
-        self.active_learning_run(self, al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
-                                 test_data, test_labels, 'Oracle')
+        #TODO make reshape flexible
+        self.active_learning_run(al_strategy, al_iterations, train_data.reshape(-1, 1), train_labels, new_data.reshape(-1, 1), new_labels,
+                                 test_data.reshape(-1, 1), test_labels, 'Oracle')
 
 
 def main(args):
