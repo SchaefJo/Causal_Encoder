@@ -9,6 +9,7 @@ from modAL.density import information_density
 from modAL.uncertainty import uncertainty_sampling, entropy_sampling
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
+from sklearn.tree import DecisionTreeClassifier
 from torch.utils.data import RandomSampler
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -175,6 +176,9 @@ class RunnerCausalModel:
                 test_dataset = data.TensorDataset(test_inps, test_labels)
                 self.test_dataset = test_dataset
 
+                # TODO remove
+                return
+
             if self.model_type == 'mlp':
                 self.train_mlp(pl_module, train_dataset, causal_var_info)
                 self.model.eval()
@@ -308,30 +312,14 @@ class RunnerCausalModel:
         else:
             raise NotImplementedError('Not implemented uncertainty for mlp')
 
-    def active_learning_debug(self, al_iterations, al_strategy, pl_module):
-        train_data, train_labels = self.train_dataset.tensors
-        new_data, new_labels = self.active_learning_pool.tensors
-        test_data, test_labels = self.test_dataset.tensors
-
-        pick_class = 17
-        train_labels = train_labels[:, pick_class]
-        new_labels = new_labels[:, pick_class]
-        test_labels = test_labels[:, pick_class]
-
-        def send_tensor_cpu(data):
-            return data.cpu().numpy() if data.is_cuda else data.numpy()
-
-        train_data = send_tensor_cpu(train_data)
-        train_labels = send_tensor_cpu(train_labels)
-        new_data = send_tensor_cpu(new_data)
-        new_labels = send_tensor_cpu(new_labels)
-        test_data = send_tensor_cpu(test_data)
-        test_labels = send_tensor_cpu(test_labels)
-
+    def active_learning_run(self, al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
+                            test_data, test_labels, data_type=""):
         if self.model_type == 'rf':
             base_model = RandomForestClassifier()
         elif self.model_type == 'gp':
             base_model = GaussianProcessClassifier()
+        elif self.model_type == 'tree':
+            base_model = DecisionTreeClassifier()
         else:
             base_model = None
 
@@ -378,9 +366,17 @@ class RunnerCausalModel:
         for i in range(al_iterations):
             print(f'al_debugging_iteration: {i}')
             query_idx, query_instance = learner.query(new_data)
-            sample_data = np.expand_dims(new_data[query_idx], axis=0)
-            sample_label = np.expand_dims(new_labels[query_idx], axis=0)
-            learner.teach(sample_data, sample_label)
+
+            query_data = new_data[query_idx]
+            query_label = new_labels[query_idx]
+
+            if query_label.ndim != 1 or query_label.shape != (1,):
+                query_label = np.expand_dims(new_labels[query_idx], axis=0)
+
+            if query_data.ndim != 2 or query_data.shape[0] != 1:
+                query_data = np.expand_dims(new_data[query_idx], axis=0)
+
+            learner.teach(query_data, query_label)
 
             new_data = np.delete(new_data, query_idx, axis=0)
             new_labels = np.delete(new_labels, query_idx, axis=0)
@@ -389,9 +385,42 @@ class RunnerCausalModel:
             score_test = learner.score(test_data, test_labels)
             score_val = learner.score(new_data, new_labels)
 
-            print(f"Train Score: {score_train}")
-            print(f"Test Score: {score_test}")
-            print(f"Val Score: {score_val}")
+            print(f"{data_type} Train Score: {score_train}")
+            print(f"{data_type} Test Score: {score_test}")
+            print(f"{data_type} Val Score: {score_val}")
+
+    def active_learning_debug(self, al_iterations, al_strategy, pl_module):
+        train_data, train_labels = self.train_dataset.tensors
+        new_data, new_labels = self.active_learning_pool.tensors
+        test_data, test_labels = self.test_dataset.tensors
+
+        pick_class = 17
+        train_labels = train_labels[:, pick_class]
+        new_labels = new_labels[:, pick_class]
+        test_labels = test_labels[:, pick_class]
+
+        last_targets = pl_module.last_target_assignment
+        ground_truth_dim = np.where(last_targets[:, 9] == 1)[0]
+        print(f"ground_truth_dim: {ground_truth_dim}")
+
+        def send_tensor_cpu(data):
+            return data.cpu().numpy() if data.is_cuda else data.numpy()
+
+        train_data = send_tensor_cpu(train_data)
+        train_labels = send_tensor_cpu(train_labels)
+        new_data = send_tensor_cpu(new_data)
+        new_labels = send_tensor_cpu(new_labels)
+        test_data = send_tensor_cpu(test_data)
+        test_labels = send_tensor_cpu(test_labels)
+
+        self.active_learning_run(self, al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
+                                 test_data, test_labels)
+        train_data = train_data[:, ground_truth_dim]
+        new_data = new_data[:, ground_truth_dim]
+        test_data = test_data[:, ground_truth_dim]
+
+        self.active_learning_run(self, al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
+                                 test_data, test_labels, 'Oracle')
 
 
 def main(args):
@@ -430,6 +459,7 @@ def main(args):
     causal_encode_runner.test_model(model_biscuit, dataset, test_dataset, args.iterations)
 
     print(dataset.get_causal_var_info())
+    print(model_biscuit.last_target_assignment)
 
     if args.active_learning_debug:
         causal_encode_runner.active_learning_debug(args.active_learning_iterations, args.active_learning_strategy,
@@ -469,7 +499,7 @@ if __name__ == '__main__':
                         default='.')
     parser.add_argument('--entangled', dest='disentangled', action='store_false',
                         help='If set, disables disentanglement. Disentanglement is normally on.')
-    parser.add_argument('--model', choices=['mlp', 'encoder', 'gp', 'rf'], default='gp')
+    parser.add_argument('--model', choices=['mlp', 'encoder', 'gp', 'rf', 'tree'], default='gp')
     parser.add_argument('--iterations', type=int, default=1, help='Number of iterations for model fitting')
     parser.add_argument('--active_learning', action='store_true', default=False)
     parser.add_argument('--active_learning_debug', action='store_true', default=False)
