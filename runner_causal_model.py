@@ -486,7 +486,7 @@ if __name__ == '__main__':
     parser.set_defaults(disentangled=True)
     args = parser.parse_args()
 
-    if args.active_learning:
+    if args.active_learning or args.active_learning_debug:
         args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
                                                   f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}_al_{args.active_learning_strategy}/')
     else:
