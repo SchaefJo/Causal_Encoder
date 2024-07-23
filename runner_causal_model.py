@@ -387,9 +387,11 @@ class RunnerCausalModel:
 
             score_train = learner.score(learner.X_training, learner.y_training)
             score_test = learner.score(test_data, test_labels)
+            score_val = learner.score(new_data, new_labels)
 
             print(f"Train Score: {score_train}")
             print(f"Test Score: {score_test}")
+            print(f"Val Score: {score_val}")
 
 
 def main(args):
