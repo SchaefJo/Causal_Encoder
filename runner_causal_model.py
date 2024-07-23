@@ -4,6 +4,10 @@ import random
 import numpy as np
 import pandas as pd
 import torch
+from modAL import ActiveLearner
+from modAL.density import information_density
+from modAL.uncertainty import uncertainty_sampling, entropy_sampling
+from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
 from torch.utils.data import RandomSampler
 from tqdm import tqdm
@@ -18,7 +22,6 @@ from models.shared.causal_gp_sklearn import CausalGPSklearn
 from models.shared.causal_model_sklearn import CausalUncertaintySklearn
 from models.shared.causal_mlp import CausalMLP
 from sklearn.ensemble import RandomForestClassifier
-
 
 seed = 42
 torch.manual_seed(seed)
@@ -49,16 +52,17 @@ class RunnerCausalModel:
         if model == 'gp':
             kernel = 1.0 * RBF(length_scale=1.0)
             # kernel = 1.0 * Matern(length_scale=1.0, nu=1.5)
-            #self.model = CausalGPSklearn(kernel=kernel, causal_var_info=causal_var_info, result_path=self.result_path)
+            # self.model = CausalGPSklearn(kernel=kernel, causal_var_info=causal_var_info, result_path=self.result_path)
             self.model = CausalUncertaintySklearn(model_name=model, causal_var_info=causal_var_info,
                                                   result_path=self.result_path, kernel=kernel)
         elif model == 'mlp':
             self.model = CausalMLP(hidden_dim=128,
-                            lr=4e-3,
-                            causal_var_info=causal_var_info,
-                            results_path=self.result_path)
+                                   lr=4e-3,
+                                   causal_var_info=causal_var_info,
+                                   results_path=self.result_path)
         elif model == 'rf':
-            self.model = CausalUncertaintySklearn(model_name=model, causal_var_info=causal_var_info, result_path=self.result_path)
+            self.model = CausalUncertaintySklearn(model_name=model, causal_var_info=causal_var_info,
+                                                  result_path=self.result_path)
 
     def train_mlp(self, pl_module, train_dataset, causal_var_info):
         device = pl_module.device
@@ -82,7 +86,7 @@ class RunnerCausalModel:
             for inps, latents in train_loader:
                 inps = inps.to(device)
                 latents = latents.to(device)
-                #inps, latents = self._prepare_input(inps, target_assignment, latents)
+                # inps, latents = self._prepare_input(inps, target_assignment, latents)
                 loss = self.model._get_loss(inps, latents)
                 optimizer.zero_grad()
                 loss.backward()
@@ -144,7 +148,7 @@ class RunnerCausalModel:
             if dataset_test is None:
                 print('No test dataset given, validation is split in half.')
                 train_dataset, test_dataset = data.random_split(full_dataset,
-                                                            lengths=[train_size, test_size])
+                                                                lengths=[train_size, test_size])
 
                 test_inps, test_labels = all_encs[test_dataset.indices], all_latents[test_dataset.indices]
 
@@ -160,11 +164,12 @@ class RunnerCausalModel:
                 self.train_dataset = train_dataset
                 train_inps, train_labels = all_encs[indices_train], all_latents[indices_train]
 
-                #get non training examples from the dataset
+                # get non training examples from the dataset
                 all_indices = set(range(len(all_encs)))
                 train_indices_set = set(indices_train)
                 remaining_indices = list(all_indices - train_indices_set)
-                self.active_learning_pool = data.TensorDataset(all_encs[remaining_indices], all_latents[remaining_indices])
+                self.active_learning_pool = data.TensorDataset(all_encs[remaining_indices],
+                                                               all_latents[remaining_indices])
 
                 test_inps, test_labels = self.preprocess_data(dataset_test, pl_module)
                 test_dataset = data.TensorDataset(test_inps, test_labels)
@@ -190,7 +195,6 @@ class RunnerCausalModel:
                 test_loader = data.DataLoader(test_dataset, shuffle=False, drop_last=False, batch_size=512)
                 self.model.compute_individual_losses(test_loader, causal_var_info, "test")
 
-
     def save_data(self, new_data, new_labels, path, max_uncertainty_idx=None):
         new_data_array = new_data.numpy() if hasattr(new_data, 'numpy') else new_data
         new_labels_array = new_labels.numpy() if hasattr(new_labels, 'numpy') else new_labels
@@ -199,7 +203,6 @@ class RunnerCausalModel:
         labels_df = pd.DataFrame(new_labels_array)
         merged_df = pd.concat([data_df, labels_df], axis=1)
         merged_df.to_csv(path)
-
 
     def active_learning(self, al_iterations, al_strategy, pl_module):
         # TODO compare MLP with gp
@@ -212,7 +215,7 @@ class RunnerCausalModel:
                 print(f'Active Learning Iteration: {i}')
                 _, uncertainty = self.model.forward(self.active_learning_pool.tensors[0])
                 if al_strategy == 'most_uncertain':
-                    #TODO does not work
+                    # TODO does not work
                     max_uncertainty = -1
                     max_uncertainty_idx = -1
                     max_causal = ''
@@ -243,11 +246,11 @@ class RunnerCausalModel:
                     max_uncertainty_idx = np.unique(np.array(max_uncertainty_idx, dtype=int))
 
                 elif al_strategy == 'random_per_causal':
-                    #max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
+                    # max_uncertainty_idx = random.randint(0, len(uncertainty.items()[0]) - 1)
 
                     num_picks = 17
-                    #max_index = len(uncertainty.items()[0])
-                    #max_uncertainty_idx = random.sample(range(max_index), num_picks)
+                    # max_index = len(uncertainty.items()[0])
+                    # max_uncertainty_idx = random.sample(range(max_index), num_picks)
                     max_uncertainty_vals = None
                     uncertainty_values = list(uncertainty.items())[0][1]
                     max_index = len(uncertainty_values)
@@ -259,7 +262,7 @@ class RunnerCausalModel:
                     max_uncertainty_idx = random.randint(0, max_index - 1)
                 elif al_strategy == 'average_uncertainty':
                     raise NotImplementedError('not yet implemented')
-                    #TODO here look at which data point would help the most classifiers at once
+                    # TODO here look at which data point would help the most classifiers at once
 
                 else:
                     raise ValueError('This active learning strategy does not exist!')
@@ -296,14 +299,97 @@ class RunnerCausalModel:
                 comb_loss = self.model._get_loss(test_inps, test_labels, save=True, al_iter=i)
                 print(f'Comb loss testing: {comb_loss}')
 
-                #print(f'Old uncertainty: {max_uncertainty_vals}')
-                #_, uncertainty = self.model.forward(new_data)
-                #print(f'New uncertainty: {uncertainty}')
+                # print(f'Old uncertainty: {max_uncertainty_vals}')
+                # _, uncertainty = self.model.forward(new_data)
+                # print(f'New uncertainty: {uncertainty}')
 
                 # TODO remove new trained data from uncertainty calc data
 
         else:
             raise NotImplementedError('Not implemented uncertainty for mlp')
+
+    def active_learning_debug(self, al_iterations, al_strategy, pl_module):
+        train_data, train_labels = self.train_dataset.tensors
+        new_data, new_labels = self.active_learning_pool.tensors
+        test_data, test_labels = self.test_dataset.tensors
+
+        pick_class = 17
+        train_labels = train_labels[:, pick_class]
+        new_labels = new_labels[:, pick_class]
+        test_labels = test_labels[:, pick_class]
+
+        def send_tensor_cpu(data):
+            return data.cpu().numpy() if data.is_cuda else data.numpy()
+
+        train_data = send_tensor_cpu(train_data)
+        train_labels = send_tensor_cpu(train_labels)
+        new_data = send_tensor_cpu(new_data)
+        new_labels = send_tensor_cpu(new_labels)
+        test_data = send_tensor_cpu(test_data)
+        test_labels = send_tensor_cpu(test_labels)
+
+        if self.model_type == 'rf':
+            base_model = RandomForestClassifier()
+        elif self.model_type == 'gp':
+            base_model = GaussianProcessClassifier()
+        else:
+            base_model = None
+
+        # TODO pick only some labels
+
+        learner = ActiveLearner(
+            estimator=base_model,
+            X_training=train_data,
+            y_training=train_labels
+        )
+
+        density = information_density(new_data)
+
+        def density_weighted_uncertainty_sampling(classifier, X_pool):
+            uncertainty_scores = uncertainty_sampling(classifier, X_pool)
+            weighted_scores = uncertainty_scores * density
+            query_idx = np.argmax(weighted_scores)
+            return query_idx, X_pool[query_idx]
+
+        def density_weighted_entropy_sampling(classifier, X_pool):
+            uncertainty_scores = entropy_sampling(classifier, X_pool)
+            weighted_scores = uncertainty_scores * density
+            query_idx = np.argmax(weighted_scores)
+            return query_idx, X_pool[query_idx]
+
+        def random_query_strategy(classifier, X_pool):
+            # Randomly select an index from the pool
+            query_idx = np.random.choice(range(len(X_pool)))
+            return query_idx, X_pool[query_idx]
+
+        if al_strategy == 'uncertain_density':
+            learner.query_strategy = density_weighted_uncertainty_sampling
+        elif al_strategy == 'random':
+            learner.query_strategy = random_query_strategy
+        elif al_strategy == 'density':
+            learner.query_strategy = information_density
+        elif al_strategy == 'uncertainty':
+            learner.query_strategy = uncertainty_sampling
+        elif al_strategy == 'entropy_sampling':
+            learner.query_strategy = entropy_sampling
+        elif al_strategy == 'entropy_density':
+            learner.query_strategy = density_weighted_entropy_sampling
+
+        for i in range(al_iterations):
+            print(f'al_debugging_iteration: {i}')
+            query_idx, query_instance = learner.query(new_data)
+            sample_data = np.expand_dims(new_data[query_idx], axis=0)
+            sample_label = np.expand_dims(new_labels[query_idx], axis=0)
+            learner.teach(sample_data, sample_label)
+
+            new_data = np.delete(new_data, query_idx, axis=0)
+            new_labels = np.delete(new_labels, query_idx, axis=0)
+
+            score_train = learner.score(learner.X_training, learner.y_training)
+            score_test = learner.score(test_data, test_labels)
+
+            print(f"Train Score: {score_train}")
+            print(f"Test Score: {score_test}")
 
 
 def main(args):
@@ -313,8 +399,9 @@ def main(args):
         dataset = iTHORDataset(args.data_dir, split=args.split, single_image=True, return_targets=False,
                                return_latents=True)
         if args.test_data_split is not None:
-            test_dataset = iTHORDataset(args.data_dir, split=args.test_data_split, single_image=True, return_targets=False,
-                               return_latents=True)
+            test_dataset = iTHORDataset(args.data_dir, split=args.test_data_split, single_image=True,
+                                        return_targets=False,
+                                        return_latents=True)
         else:
             test_dataset = None
         model_biscuit = BISCUITNF.load_from_checkpoint(args.biscuit_checkpoint)
@@ -322,8 +409,9 @@ def main(args):
         dataset = VoronoiDataset(args.data_dir, split=args.split, single_image=True, return_targets=False,
                                  return_latents=True)
         if args.test_data_split is not None:
-            test_dataset = VoronoiDataset(args.data_dir, split=args.test_data_split, single_image=True, return_targets=False,
-                                 return_latents=True)
+            test_dataset = VoronoiDataset(args.data_dir, split=args.test_data_split, single_image=True,
+                                          return_targets=False,
+                                          return_latents=True)
         else:
             test_dataset = None
         model_biscuit = BISCUITVAE.load_from_checkpoint(args.biscuit_checkpoint)
@@ -332,14 +420,21 @@ def main(args):
     _ = model_biscuit.eval()
 
     causal_encode_runner = RunnerCausalModel(num_train_epochs=args.max_epochs, log_interval=args.log_interval,
-                                             checkpoint_path=args.causal_encoder_output, causal_var_info=dataset.get_causal_var_info(),
+                                             checkpoint_path=args.causal_encoder_output,
+                                             causal_var_info=dataset.get_causal_var_info(),
                                              train_prop=args.train_prop, dataset=args.dataset,
                                              disentangled=args.disentangled, model=args.model)
 
     causal_encode_runner.test_model(model_biscuit, dataset, test_dataset, args.iterations)
 
+    print(dataset.get_causal_var_info())
+
+    if args.active_learning_debug:
+        causal_encode_runner.active_learning_debug(args.active_learning_iterations, args.active_learning_strategy,
+                                                   model_biscuit)
     if args.active_learning:
-        causal_encode_runner.active_learning(args.active_learning_iterations, args.active_learning_strategy, model_biscuit)
+        causal_encode_runner.active_learning(args.active_learning_iterations, args.active_learning_strategy,
+                                             model_biscuit)
 
 
 def create_versioned_subdir(base_dir):
@@ -355,8 +450,6 @@ def create_versioned_subdir(base_dir):
     os.makedirs(new_version_dir)
 
     return new_version_dir
-
-
 
 
 if __name__ == '__main__':
@@ -377,15 +470,23 @@ if __name__ == '__main__':
     parser.add_argument('--model', choices=['mlp', 'encoder', 'gp', 'rf'], default='gp')
     parser.add_argument('--iterations', type=int, default=1, help='Number of iterations for model fitting')
     parser.add_argument('--active_learning', action='store_true', default=False)
+    parser.add_argument('--active_learning_debug', action='store_true', default=False)
     parser.add_argument('--active_learning_iterations', type=int, default=10)
     parser.add_argument('--active_learning_strategy', default='most_uncertain', choices=['most_uncertain',
-                        'uncertain_per_causal', 'average_uncertainty', 'random', 'one_most_uncertain', 'random_per_causal'])
+                                                                                         'uncertain_per_causal',
+                                                                                         'average_uncertainty',
+                                                                                         'random', 'one_most_uncertain',
+                                                                                         'random_per_causal',
+                                                                                         'uncertain_density', 'density',
+                                                                                         'uncertainty',
+                                                                                         'entropy_sampling',
+                                                                                         'entropy_density'])
     parser.set_defaults(disentangled=True)
     args = parser.parse_args()
 
     if args.active_learning:
         args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
-                   f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}_al_{args.active_learning_strategy}/')
+                                                  f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}_al_{args.active_learning_strategy}/')
     else:
         args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
                                                   f'{args.dataset}_{args.split}_{args.train_prop}_{args.max_epochs}_DISENTANGLED{args.disentangled}/')
