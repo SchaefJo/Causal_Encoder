@@ -1,4 +1,5 @@
 import argparse
+import json
 import random
 from collections import Counter
 
@@ -26,8 +27,13 @@ from models.shared.causal_model_sklearn import CausalUncertaintySklearn
 from models.shared.causal_mlp import CausalMLP
 from sklearn.ensemble import RandomForestClassifier
 
-seed = 42
-torch.manual_seed(seed)
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 class RunnerCausalModel:
@@ -141,8 +147,14 @@ class RunnerCausalModel:
         all_encs, all_latents = self.preprocess_data(dataset, pl_module)
         full_dataset = data.TensorDataset(all_encs, all_latents)
 
+
+
+
         train_size = int(self.train_prop * all_encs.shape[0])
         print(f'Train Size {train_size}')
+
+        self.full_dataset = full_dataset
+        self.train_size = train_size
 
         test_size = all_encs.shape[0] - train_size
 
@@ -314,14 +326,27 @@ class RunnerCausalModel:
         else:
             raise NotImplementedError('Not implemented uncertainty for mlp')
 
+
+    def _save_metrics_to_file(self, metrics, file_name):
+        if os.path.exists(file_name):
+            with open(file_name, 'r') as f:
+                existing_metrics = json.load(f)
+            existing_metrics.extend(metrics)
+            with open(file_name, 'w') as f:
+                json.dump(existing_metrics, f, indent=4)
+        else:
+            with open(file_name, 'w') as f:
+                json.dump(metrics, f, indent=4)
+
+
     def active_learning_run(self, al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
-                            test_data, test_labels, data_type=""):
+                            test_data, test_labels, rep, causal, data_type=""):
         if self.model_type == 'rf':
-            base_model = RandomForestClassifier()
+            base_model = RandomForestClassifier(random_state=0)
         elif self.model_type == 'gp':
-            base_model = GaussianProcessClassifier()
+            base_model = GaussianProcessClassifier(random_state=0)
         elif self.model_type == 'tree':
-            base_model = DecisionTreeClassifier()
+            base_model = DecisionTreeClassifier(random_state=0)
         else:
             base_model = None
 
@@ -367,6 +392,7 @@ class RunnerCausalModel:
 
         oracle_values = []
         oracle_labels = []
+
         for i in range(al_iterations):
             print(f'al_debugging_iteration: {i}')
             query_idx, query_instance = learner.query(new_data)
@@ -393,11 +419,19 @@ class RunnerCausalModel:
             print(f"{data_type} Test Score: {score_test}")
             print(f"{data_type} Val Score: {score_val}")
 
+            metric = {'causal': causal}
+            metric['train_score'] = score_train
+            metric['test_score'] = score_test
+            metric['val_score'] = score_val
+            metric['is_oracle'] = True if data_type == 'Oracle' else False
+            metric['rep'] = rep
+            metric['iter'] = i
+            self.metrics.append(metric)
+
             if data_type == 'Oracle':
                 oracle_values.append(float(query_data))
                 oracle_labels.append(int(query_label))
 
-        #oracle_labels = [label[0] for label in oracle_labels]
         oracle_counts = Counter(oracle_labels)
         print(f"Query labels: {oracle_counts}")
 
@@ -409,41 +443,78 @@ class RunnerCausalModel:
         plt.grid(True)
 
         # Saving the plot
-        plt.savefig(os.path.join(self.checkpoint_path, 'query_data_distribution.png'))
+        plt.savefig(os.path.join(self.checkpoint_path, f'rep_{rep}_query_data_distribution.png'))
 
 
-    def active_learning_debug(self, al_iterations, al_strategy, pl_module):
-        train_data, train_labels = self.train_dataset.tensors
-        new_data, new_labels = self.active_learning_pool.tensors
+    def active_learning_debug(self, al_iterations, al_strategy, pl_module, al_reps, al_start_strat, causal_var_info):
         test_data, test_labels = self.test_dataset.tensors
 
+        self.metrics = []
+
         pick_class = 17
-        train_labels = train_labels[:, pick_class]
-        new_labels = new_labels[:, pick_class]
         test_labels = test_labels[:, pick_class]
+
+        causal_key_list = list(causal_var_info.keys())
+        causal = causal_key_list[pick_class]
+        print(causal)
 
         last_targets = pl_module.last_target_assignment
         ground_truth_dim = np.where(last_targets[:, 9] == 1)[0]
         print(f"ground_truth_dim: {ground_truth_dim}")
 
         def send_tensor_cpu(data):
-            return data.cpu().numpy() if data.is_cuda else data.numpy()
+            if isinstance(data, torch.Tensor):
+                return data.cpu().numpy() if data.is_cuda else data.numpy()
+            else:
+                return data
 
-        train_data = send_tensor_cpu(train_data)
-        train_labels = send_tensor_cpu(train_labels)
-        new_data = send_tensor_cpu(new_data)
-        new_labels = send_tensor_cpu(new_labels)
-        test_data = send_tensor_cpu(test_data)
-        test_labels = send_tensor_cpu(test_labels)
-        self.active_learning_run(al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
-                                 test_data, test_labels)
+        for i in range(al_reps):
+            if al_start_strat == 'proportions':
+                samples_train = RandomSampler(self.full_dataset, replacement=True, num_samples=self.train_size)
+                indices_train = list(samples_train)
+            else:
+                labels = self.full_dataset.tensors[1]
+                label_0_indices = (labels == 0).nonzero(as_tuple=True)[0].tolist()
+                label_1_indices = (labels == 1).nonzero(as_tuple=True)[0].tolist()
 
-        train_data = train_data[:, ground_truth_dim]
-        new_data = new_data[:, ground_truth_dim]
-        test_data = test_data[:, ground_truth_dim]
-        #TODO make reshape flexible
-        self.active_learning_run(al_strategy, al_iterations, train_data.reshape(-1, 1), train_labels, new_data.reshape(-1, 1), new_labels,
-                                 test_data.reshape(-1, 1), test_labels, 'Oracle')
+                sample_index_0 = random.choice(label_0_indices)
+                sample_index_1 = random.choice(label_1_indices)
+                indices_train = list([sample_index_0, sample_index_1])
+
+            all_indices = set(range(len(self.full_dataset)))
+            train_indices_set = set(indices_train)
+            remaining_indices = list(all_indices - train_indices_set)
+
+            full_data, full_labels = self.full_dataset.tensors
+            train_data = full_data[indices_train]
+            train_labels = full_labels[indices_train]
+            new_data = full_data[remaining_indices]
+            new_labels = full_labels[remaining_indices]
+
+            train_labels = train_labels[:, pick_class]
+            new_labels = new_labels[:, pick_class]
+
+            train_data = send_tensor_cpu(train_data)
+            train_labels = send_tensor_cpu(train_labels)
+            new_data = send_tensor_cpu(new_data)
+            new_labels = send_tensor_cpu(new_labels)
+            test_data = send_tensor_cpu(test_data)
+            test_labels = send_tensor_cpu(test_labels)
+
+            train_data_oracle = train_data[:, ground_truth_dim]
+            new_data_oracle = new_data[:, ground_truth_dim]
+            test_data_oracle = test_data[:, ground_truth_dim]
+
+            print(f"Rep: {i}")
+            self.active_learning_run(al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
+                                     test_data, test_labels, i, causal)
+
+            #TODO make reshape flexible
+            #self.active_learning_run(al_strategy, al_iterations, train_data_oracle.reshape(-1, 1), train_labels,
+            #                         new_data_oracle.reshape(-1, 1), new_labels, test_data_oracle.reshape(-1, 1),
+            #                         test_labels, i, causal, 'Oracle')
+
+        self._save_metrics_to_file(self.metrics, file_name=self.result_path)
 
 
 def main(args):
@@ -486,7 +557,8 @@ def main(args):
 
     if args.active_learning_debug:
         causal_encode_runner.active_learning_debug(args.active_learning_iterations, args.active_learning_strategy,
-                                                   model_biscuit)
+                                                   model_biscuit, args.active_learning_repetitions,
+                                                   args.active_learning_start_strategy, dataset.get_causal_var_info())
     if args.active_learning:
         causal_encode_runner.active_learning(args.active_learning_iterations, args.active_learning_strategy,
                                              model_biscuit)
@@ -527,6 +599,7 @@ if __name__ == '__main__':
     parser.add_argument('--active_learning', action='store_true', default=False)
     parser.add_argument('--active_learning_debug', action='store_true', default=False)
     parser.add_argument('--active_learning_iterations', type=int, default=10)
+    parser.add_argument('--active_learning_repetitions', type=int, default=10)
     parser.add_argument('--active_learning_strategy', default='most_uncertain', choices=['most_uncertain',
                                                                                          'uncertain_per_causal',
                                                                                          'average_uncertainty',
@@ -536,8 +609,13 @@ if __name__ == '__main__':
                                                                                          'uncertainty',
                                                                                          'entropy_sampling',
                                                                                          'entropy_density'])
+    parser.add_argument('--active_learning_start_strategy', default='proportions',
+                        choices=['proportions', 'stratified_2'])
+    parser.add_argument('--seed', type=int, default=42)
     parser.set_defaults(disentangled=True)
     args = parser.parse_args()
+
+    set_seed(args.seed)
 
     if args.active_learning or args.active_learning_debug:
         args.causal_encoder_output = os.path.join(args.causal_encoder_output, f'output_causal_{args.model}',
