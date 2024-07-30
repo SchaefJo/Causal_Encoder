@@ -497,6 +497,11 @@ class RunnerCausalModel:
             full_data, full_labels = self.full_dataset.tensors
             train_data = full_data[indices_train]
             train_labels = full_labels[indices_train]
+
+            print('label issue')
+            print(indices_train)
+            print(train_labels)
+
             new_data = full_data[remaining_indices]
             new_labels = full_labels[remaining_indices]
 
