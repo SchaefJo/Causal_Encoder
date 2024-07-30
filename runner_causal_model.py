@@ -363,13 +363,21 @@ class RunnerCausalModel:
         def density_weighted_uncertainty_sampling(classifier, X_pool):
             uncertainty_scores = uncertainty_sampling(classifier, X_pool)
             weighted_scores = uncertainty_scores * density
-            query_idx = np.argmax(weighted_scores)
+            #query_idx = np.argmax(weighted_scores)
+
+            row_max_indices = np.argmax(weighted_scores, axis=1)
+            max_values = weighted_scores[np.arange(weighted_scores.shape[0]), row_max_indices]
+            query_idx = np.argmax(max_values)
             return query_idx, X_pool[query_idx]
 
         def density_weighted_entropy_sampling(classifier, X_pool):
             uncertainty_scores = entropy_sampling(classifier, X_pool)
             weighted_scores = uncertainty_scores * density
-            query_idx = np.argmax(weighted_scores)
+            #query_idx = np.argmax(weighted_scores)
+
+            row_max_indices = np.argmax(weighted_scores, axis=1)
+            max_values = weighted_scores[np.arange(weighted_scores.shape[0]), row_max_indices]
+            query_idx = np.argmax(max_values)
             return query_idx, X_pool[query_idx]
 
         def random_query_strategy(classifier, X_pool):
