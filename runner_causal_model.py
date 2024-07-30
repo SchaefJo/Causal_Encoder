@@ -432,18 +432,19 @@ class RunnerCausalModel:
                 oracle_values.append(float(query_data))
                 oracle_labels.append(int(query_label))
 
-        oracle_counts = Counter(oracle_labels)
-        print(f"Query labels: {oracle_counts}")
+        if data_type == 'Oracle':
+            oracle_counts = Counter(oracle_labels)
+            print(f"Query labels: {oracle_counts}")
 
-        plt.figure(figsize=(10, 6))
-        plt.hist(oracle_values, bins=20, edgecolor='black')
-        plt.title('Distribution of Query Data of the oracles')
-        plt.xlabel('Value')
-        plt.ylabel('Frequency')
-        plt.grid(True)
+            plt.figure(figsize=(10, 6))
+            plt.hist(oracle_values, bins=20, edgecolor='black')
+            plt.title('Distribution of Query Data of the oracles')
+            plt.xlabel('Value')
+            plt.ylabel('Frequency')
+            plt.grid(True)
 
-        # Saving the plot
-        plt.savefig(os.path.join(self.checkpoint_path, f'rep_{rep}_query_data_distribution.png'))
+            # Saving the plot
+            plt.savefig(os.path.join(self.checkpoint_path, f'rep_{rep}_query_data_distribution.png'))
 
 
     def active_learning_debug(self, al_iterations, al_strategy, pl_module, al_reps, al_start_strat, causal_var_info):
