@@ -483,6 +483,7 @@ class RunnerCausalModel:
                 indices_train = list(samples_train)
             else:
                 labels = self.full_dataset.tensors[1]
+                labels = labels[:, pick_class]
                 label_0_indices = (labels == 0).nonzero(as_tuple=True)[0].tolist()
                 label_1_indices = (labels == 1).nonzero(as_tuple=True)[0].tolist()
 
