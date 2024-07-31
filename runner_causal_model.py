@@ -373,6 +373,12 @@ class RunnerCausalModel:
 
         def density_weighted_uncertainty_sampling(classifier, X_pool):
             uncertainty_scores = uncertainty_sampling(classifier, X_pool)
+
+            print("Type of uncertainty_scores:", type(uncertainty_scores))
+            print("Type of density:", type(density))
+            print("Shape of uncertainty_scores:", np.shape(uncertainty_scores))
+            print("Shape of density:", np.shape(density))
+
             weighted_scores = uncertainty_scores * density
             #query_idx = np.argmax(weighted_scores)
 
@@ -383,6 +389,12 @@ class RunnerCausalModel:
 
         def density_weighted_entropy_sampling(classifier, X_pool):
             uncertainty_scores = entropy_sampling(classifier, X_pool)
+
+            print("Type of uncertainty_scores:", type(uncertainty_scores))
+            print("Type of density:", type(density))
+            print("Shape of uncertainty_scores:", np.shape(uncertainty_scores))
+            print("Shape of density:", np.shape(density))
+
             weighted_scores = uncertainty_scores * density
             #query_idx = np.argmax(weighted_scores)
 
@@ -393,6 +405,12 @@ class RunnerCausalModel:
 
         def density_weighted_uncertainty_sampling_regression(regressor, X_pool):
             uncertainty_scores = uncertainty_sampling_regression(regressor, X_pool)
+
+            print("Type of uncertainty_scores:", type(uncertainty_scores))
+            print("Type of density:", type(density))
+            print("Shape of uncertainty_scores:", np.shape(uncertainty_scores))
+            print("Shape of density:", np.shape(density))
+
             weighted_scores = uncertainty_scores * density
             #query_idx = np.argmax(weighted_scores)
 
@@ -421,6 +439,7 @@ class RunnerCausalModel:
             return query_idx, X_pool[query_idx]
 
         if classification:
+            print(f'classification al_strat: {al_strategy}')
             if al_strategy == 'uncertain_density':
                 learner.query_strategy = density_weighted_uncertainty_sampling
             elif al_strategy == 'random':
@@ -434,6 +453,7 @@ class RunnerCausalModel:
             elif al_strategy == 'entropy_density':
                 learner.query_strategy = density_weighted_entropy_sampling
         else:
+            print(f'regression al_strat: {al_strategy}')
             if al_strategy == 'random':
                 learner.query_strategy = random_query_strategy
             elif al_strategy == 'density':
@@ -540,6 +560,7 @@ class RunnerCausalModel:
 
             for i in range(al_reps):
                 classification = causal_var_info[causal].startswith("categ_")
+                print(f'classification: {classification}')
 
                 if al_start_strat == 'proportions':
                     samples_train = RandomSampler(self.full_dataset, replacement=True, num_samples=self.train_size)
