@@ -506,7 +506,6 @@ class RunnerCausalModel:
         self.metrics = []
 
         for pick_class in range(len(causal_var_info)):
-            pick_class = 2
             test_labels = test_labels[:, pick_class]
 
             causal = causal_key_list[pick_class]
@@ -599,7 +598,6 @@ class RunnerCausalModel:
                 #                         test_labels, i, causal, 'Oracle')
 
             self._save_metrics_to_file(self.metrics, file_name=self.result_path)
-            break
 
 
 def main(args):
