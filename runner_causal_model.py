@@ -501,17 +501,12 @@ class RunnerCausalModel:
 
 
     def active_learning_debug(self, al_iterations, al_strategy, pl_module, al_reps, al_start_strat, causal_var_info):
-        test_data, test_labels = self.test_dataset.tensors
+        test_data, test_labels_all = self.test_dataset.tensors
         causal_key_list = list(causal_var_info.keys())
         self.metrics = []
 
         for pick_class in range(len(causal_var_info)):
-
-            print('debug')
-            print(test_labels.shape)
-            print(pick_class)
-
-            test_labels = test_labels[:, pick_class]
+            test_labels = test_labels_all[:, pick_class]
 
             causal = causal_key_list[pick_class]
             print(causal)
