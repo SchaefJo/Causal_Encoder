@@ -10,9 +10,9 @@ from matplotlib import pyplot as plt
 from modAL import ActiveLearner
 from modAL.density import information_density
 from modAL.uncertainty import uncertainty_sampling, entropy_sampling
-from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier, GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from torch.utils.data import RandomSampler
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -25,7 +25,8 @@ from models.biscuit_nf import BISCUITNF
 from models.shared.causal_gp_sklearn import CausalGPSklearn
 from models.shared.causal_model_sklearn import CausalUncertaintySklearn
 from models.shared.causal_mlp import CausalMLP
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
 
 def set_seed(seed):
     random.seed(seed)
@@ -340,15 +341,25 @@ class RunnerCausalModel:
 
 
     def active_learning_run(self, al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
-                            test_data, test_labels, rep, causal, data_type=""):
-        if self.model_type == 'rf':
-            base_model = RandomForestClassifier(random_state=0)
-        elif self.model_type == 'gp':
-            base_model = GaussianProcessClassifier(random_state=0)
-        elif self.model_type == 'tree':
-            base_model = DecisionTreeClassifier(random_state=0)
+                            test_data, test_labels, rep, causal, data_type="", classification=True):
+        if classification:
+            if self.model_type == 'rf':
+                base_model = RandomForestClassifier(random_state=0)
+            elif self.model_type == 'gp':
+                base_model = GaussianProcessClassifier(random_state=0)
+            elif self.model_type == 'tree':
+                base_model = DecisionTreeClassifier(random_state=0)
+            else:
+                base_model = None
         else:
-            base_model = None
+            if self.model_type == 'rf':
+                base_model = RandomForestRegressor(random_state=0)
+            elif self.model_type == 'gp':
+                base_model = GaussianProcessRegressor(random_state=0)
+            elif self.model_type == 'tree':
+                base_model = DecisionTreeRegressor(random_state=0)
+            else:
+                base_model = None
 
         # TODO pick only some labels
         learner = ActiveLearner(
@@ -380,23 +391,57 @@ class RunnerCausalModel:
             query_idx = np.argmax(max_values)
             return query_idx, X_pool[query_idx]
 
+        def density_weighted_uncertainty_sampling_regression(regressor, X_pool):
+            uncertainty_scores = uncertainty_sampling_regression(regressor, X_pool)
+            weighted_scores = uncertainty_scores * density
+            #query_idx = np.argmax(weighted_scores)
+
+            row_max_indices = np.argmax(weighted_scores, axis=1)
+            max_values = weighted_scores[np.arange(weighted_scores.shape[0]), row_max_indices]
+            query_idx = np.argmax(max_values)
+            return query_idx, X_pool[query_idx]
+
+        def uncertainty_sampling_regression(learner, X):
+            regressor = learner.estimator
+
+            if isinstance(regressor, GaussianProcessRegressor):
+                _, std = regressor.predict(X, return_std=True)
+            elif isinstance(regressor, RandomForestRegressor):
+                all_tree_preds = np.array([tree.predict(X) for tree in regressor.estimators_])
+                std = np.std(all_tree_preds, axis=0)
+            else:
+                print(type(regressor))
+
+            query_idx = np.argmax(std)
+            return query_idx, X[query_idx]
+
         def random_query_strategy(classifier, X_pool):
             # Randomly select an index from the pool
             query_idx = np.random.choice(range(len(X_pool)))
             return query_idx, X_pool[query_idx]
 
-        if al_strategy == 'uncertain_density':
-            learner.query_strategy = density_weighted_uncertainty_sampling
-        elif al_strategy == 'random':
-            learner.query_strategy = random_query_strategy
-        elif al_strategy == 'density':
-            learner.query_strategy = information_density
-        elif al_strategy == 'uncertainty':
-            learner.query_strategy = uncertainty_sampling
-        elif al_strategy == 'entropy_sampling':
-            learner.query_strategy = entropy_sampling
-        elif al_strategy == 'entropy_density':
-            learner.query_strategy = density_weighted_entropy_sampling
+        if classification:
+            if al_strategy == 'uncertain_density':
+                learner.query_strategy = density_weighted_uncertainty_sampling
+            elif al_strategy == 'random':
+                learner.query_strategy = random_query_strategy
+            elif al_strategy == 'density':
+                learner.query_strategy = information_density
+            elif al_strategy == 'uncertainty':
+                learner.query_strategy = uncertainty_sampling
+            elif al_strategy == 'entropy_sampling':
+                learner.query_strategy = entropy_sampling
+            elif al_strategy == 'entropy_density':
+                learner.query_strategy = density_weighted_entropy_sampling
+        else:
+            if al_strategy == 'random':
+                learner.query_strategy = random_query_strategy
+            elif al_strategy == 'density':
+                learner.query_strategy = information_density
+            elif al_strategy == 'uncertain_density':
+                learner.query_strategy = density_weighted_uncertainty_sampling_regression
+            elif al_strategy == 'uncertainty':
+                learner.query_strategy = uncertainty_sampling_regression
 
         oracle_values = []
         oracle_labels = []
@@ -457,79 +502,104 @@ class RunnerCausalModel:
 
     def active_learning_debug(self, al_iterations, al_strategy, pl_module, al_reps, al_start_strat, causal_var_info):
         test_data, test_labels = self.test_dataset.tensors
-
+        causal_key_list = list(causal_var_info.keys())
         self.metrics = []
 
-        pick_class = 17
-        test_labels = test_labels[:, pick_class]
+        for pick_class in range(len(causal_var_info)):
+            pick_class = 2
+            test_labels = test_labels[:, pick_class]
 
-        causal_key_list = list(causal_var_info.keys())
-        causal = causal_key_list[pick_class]
-        print(causal)
+            causal = causal_key_list[pick_class]
+            print(causal)
 
-        last_targets = pl_module.last_target_assignment
-        ground_truth_dim = np.where(last_targets[:, 9] == 1)[0]
-        print(f"ground_truth_dim: {ground_truth_dim}")
+            def get_ithor_causal_factor(class_index):
+                if class_index == 0:
+                    return 0
+                elif 1 <= class_index <= 6:
+                    return 1
+                elif class_index == 7:
+                    return 2
+                elif class_index == 8:
+                    return 3
+                elif 9 <= class_index <= 12:
+                    return 4
+                elif 13 <= class_index <= 17:
+                    return class_index - 8
+                else:
+                    raise ValueError("Class index must be in the range 0 to 17.")
 
-        def send_tensor_cpu(data):
-            if isinstance(data, torch.Tensor):
-                return data.cpu().numpy() if data.is_cuda else data.numpy()
-            else:
-                return data
+            last_targets = pl_module.last_target_assignment
+            last_target_causal_dim = get_ithor_causal_factor(pick_class)
+            ground_truth_dim = np.where(last_targets[:, last_target_causal_dim] == 1)[0]
+            print(f"ground_truth_dim: {ground_truth_dim}")
 
-        for i in range(al_reps):
-            if al_start_strat == 'proportions':
-                samples_train = RandomSampler(self.full_dataset, replacement=True, num_samples=self.train_size)
-                indices_train = list(samples_train)
-            else:
-                labels = self.full_dataset.tensors[1]
-                labels = labels[:, pick_class]
-                label_0_indices = (labels == 0).nonzero(as_tuple=True)[0].tolist()
-                label_1_indices = (labels == 1).nonzero(as_tuple=True)[0].tolist()
+            def send_tensor_cpu(data):
+                if isinstance(data, torch.Tensor):
+                    return data.cpu().numpy() if data.is_cuda else data.numpy()
+                else:
+                    return data
 
-                sample_index_0 = random.choice(label_0_indices)
-                sample_index_1 = random.choice(label_1_indices)
-                indices_train = list([sample_index_0, sample_index_1])
+            for i in range(al_reps):
+                classification = causal_var_info[causal].startswith("categ_")
 
-            all_indices = set(range(len(self.full_dataset)))
-            train_indices_set = set(indices_train)
-            remaining_indices = list(all_indices - train_indices_set)
+                if al_start_strat == 'proportions':
+                    samples_train = RandomSampler(self.full_dataset, replacement=True, num_samples=self.train_size)
+                    indices_train = list(samples_train)
+                else:
+                    labels = self.full_dataset.tensors[1]
+                    labels = labels[:, pick_class]
+                    if classification:
+                        label_0_indices = (labels == 0).nonzero(as_tuple=True)[0].tolist()
+                        label_1_indices = (labels == 1).nonzero(as_tuple=True)[0].tolist()
 
-            full_data, full_labels = self.full_dataset.tensors
-            train_data = full_data[indices_train]
-            train_labels = full_labels[indices_train]
+                        sample_index_0 = random.choice(label_0_indices)
+                        sample_index_1 = random.choice(label_1_indices)
+                        indices_train = list([sample_index_0, sample_index_1])
+                    else:
+                        indices_train = random.sample(range(len(labels)), 2)
 
-            print('label issue')
-            print(indices_train)
-            print(train_labels)
+                all_indices = set(range(len(self.full_dataset)))
+                train_indices_set = set(indices_train)
+                remaining_indices = list(all_indices - train_indices_set)
 
-            new_data = full_data[remaining_indices]
-            new_labels = full_labels[remaining_indices]
+                full_data, full_labels = self.full_dataset.tensors
+                train_data = full_data[indices_train]
+                train_labels = full_labels[indices_train]
 
-            train_labels = train_labels[:, pick_class]
-            new_labels = new_labels[:, pick_class]
+                print('label issue')
+                print(indices_train)
+                print(train_labels)
 
-            train_data = send_tensor_cpu(train_data)
-            train_labels = send_tensor_cpu(train_labels)
-            new_data = send_tensor_cpu(new_data)
-            new_labels = send_tensor_cpu(new_labels)
-            test_data = send_tensor_cpu(test_data)
-            test_labels = send_tensor_cpu(test_labels)
+                new_data = full_data[remaining_indices]
+                new_labels = full_labels[remaining_indices]
 
-            train_data_oracle = train_data[:, ground_truth_dim]
-            new_data_oracle = new_data[:, ground_truth_dim]
-            test_data_oracle = test_data[:, ground_truth_dim]
+                train_labels = train_labels[:, pick_class]
+                new_labels = new_labels[:, pick_class]
 
-            print(f"Rep: {i}")
-            self.active_learning_run(al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
-                                     test_data, test_labels, i, causal)
+                train_data = send_tensor_cpu(train_data)
+                train_labels = send_tensor_cpu(train_labels)
+                new_data = send_tensor_cpu(new_data)
+                new_labels = send_tensor_cpu(new_labels)
+                test_data = send_tensor_cpu(test_data)
+                test_labels = send_tensor_cpu(test_labels)
 
-            #TODO make reshape flexible
-            #self.active_learning_run(al_strategy, al_iterations, train_data_oracle.reshape(-1, 1), train_labels,
-            #                         new_data_oracle.reshape(-1, 1), new_labels, test_data_oracle.reshape(-1, 1),
-            #                         test_labels, i, causal, 'Oracle')
+                train_data_oracle = train_data[:, ground_truth_dim]
+                new_data_oracle = new_data[:, ground_truth_dim]
+                test_data_oracle = test_data[:, ground_truth_dim]
 
-        self._save_metrics_to_file(self.metrics, file_name=self.result_path)
+
+
+                print(f"Rep: {i}")
+                self.active_learning_run(al_strategy, al_iterations, train_data, train_labels, new_data, new_labels,
+                                         test_data, test_labels, i, causal, classification=classification)
+
+                #TODO make reshape flexible
+                #self.active_learning_run(al_strategy, al_iterations, train_data_oracle.reshape(-1, 1), train_labels,
+                #                         new_data_oracle.reshape(-1, 1), new_labels, test_data_oracle.reshape(-1, 1),
+                #                         test_labels, i, causal, 'Oracle')
+
+            self._save_metrics_to_file(self.metrics, file_name=self.result_path)
+            break
 
 
 def main(args):
