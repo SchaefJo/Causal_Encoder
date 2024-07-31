@@ -506,6 +506,11 @@ class RunnerCausalModel:
         self.metrics = []
 
         for pick_class in range(len(causal_var_info)):
+
+            print('debug')
+            print(test_labels.shape)
+            print(pick_class)
+
             test_labels = test_labels[:, pick_class]
 
             causal = causal_key_list[pick_class]
