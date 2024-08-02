@@ -26,6 +26,7 @@ from models.shared.causal_gp_sklearn import CausalGPSklearn
 from models.shared.causal_model_sklearn import CausalUncertaintySklearn
 from models.shared.causal_mlp import CausalMLP
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.metrics import f1_score, mean_absolute_error, mean_squared_error
 
 
 def set_seed(seed):
@@ -147,9 +148,6 @@ class RunnerCausalModel:
 
         all_encs, all_latents = self.preprocess_data(dataset, pl_module)
         full_dataset = data.TensorDataset(all_encs, all_latents)
-
-
-
 
         train_size = int(self.train_prop * all_encs.shape[0])
         print(f'Train Size {train_size}')
@@ -499,6 +497,16 @@ class RunnerCausalModel:
             metric['is_oracle'] = True if data_type == 'Oracle' else False
             metric['rep'] = rep
             metric['iter'] = i
+
+            preds = learner.predict(test_data)
+            if classification:
+                metric['f1_score'] = f1_score(test_labels, preds)
+                print(f"F1: {metric['f1_score']}")
+            else:
+                metric['mae'] = mean_absolute_error(test_labels, preds)
+                metric['mse'] = mean_squared_error(test_labels, preds)
+                print(f"MAE: {metric['mae']}")
+                print(f"MSE: {metric['mse']}")
             self.metrics.append(metric)
 
             if data_type == 'Oracle':
